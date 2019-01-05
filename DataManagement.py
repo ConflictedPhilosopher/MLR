@@ -55,9 +55,13 @@ class DataManage:
 
         # Format and Shuffle Datasets----------------------------------------------------------------------------------------
         if testFile != 'None':
-            self.testFormatted = self.formatData(rawTestData)  # Stores the formatted testing data set used throughout the algorithm.
+            testFormatted = self.formatData(rawTestData)  # Stores the formatted testing data set used throughout the algorithm.
+            self.testFormatted = self.sampleData(testFormatted, 0.3)
+            self.numTestInstances = len(self.testFormatted)
 
-        self.trainFormatted = self.formatData(rawTrainData)  # Stores the formatted training data set used throughout the algorithm.
+        trainFormatted = self.formatData(rawTrainData)  # Stores the formatted training data set used throughout the algorithm.
+        self.trainFormatted = self.sampleData(trainFormatted, 0.3)
+        self.numTrainInstances = len(self.trainFormatted)
         print("----------------------------------------------------------------------------")
 
     def loadData(self, dataFile, doTrain):
@@ -265,10 +269,7 @@ class DataManage:
         self.phenotypeRange = self.phenotypeList[1] - self.phenotypeList[0]
 
     def formatData(self, rawData):
-        """ Get the data into a format convenient for the algorithm to interact with. Specifically each instance is stored in a list as follows; [Attribute States, Phenotype, InstanceID] """
-        print("Datamanagement: Formatting Data...")
         formatted = []
-        # Initialize data format---------------------------------------------------------
         for i in range(len(rawData)):
             formatted.append([None, None, None, None])  # [Attribute States, Phenotype, InstanceID]
 
@@ -302,3 +303,9 @@ class DataManage:
         random.shuffle(formatted)  # One time randomization of the order the of the instances in the data, so that if the data was ordered by phenotype, this potential learning bias (based on instance ordering) is eliminated.
         return formatted
 
+    def sampleData(self, inData, sampleRate):
+        sampleCount = round(len(inData) * sampleRate)
+        outData = []
+        for it in range(sampleCount):
+            outData.append(inData[it][:])
+        return outData

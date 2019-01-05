@@ -5,6 +5,8 @@ import time
 import os.path
 from joblib import Parallel, delayed
 
+import numpy as np
+
 from config import *
 
 def MLRBC(arg):
@@ -1731,34 +1733,53 @@ def MLRBC(arg):
 
     class ClassAccuracy:
         def __init__(self):
-            """ Initialize the accuracy calculation for a single class """
-            self.T_myClass = 0  # For binary class problems this would include true positives
-            self.T_otherClass = 0  # For binary class problems this would include true negatives
-            self.F_myClass = 0  # For binary class problems this would include false positives
-            self.F_otherClass = 0  # For binary class problems this would include false negatives
+            classAccDict = dict(TP=0.0, FP=0.0, TN=0.0, FN=0.0)
+            self.classAccDictList = [classAccDict] * cons.env.formatData.ClassCount
 
-        def updateAccuracy(self, thisIsMe, accurateClass):
+        def updateClassBased(self, target, combPred):
             """ Increment the appropriate cell of the confusion matrix """
-            if thisIsMe and accurateClass:
-                self.T_myClass += 1
-            elif accurateClass:
-                self.T_otherClass += 1
-            elif thisIsMe:
-                self.F_myClass += 1
-            else:
-                self.F_otherClass += 1
+            for it in range(cons.env.formatData.ClassCount):
+                dictC = self.classAccDictList[it].copy()
+                dictC["TP"] += int(target[it]) and int(combPred[it])
+                dictC["FP"] += (int(target[it]) ^ int(combPred[it])) and int(combPred[it])
+                dictC["TN"] += not (int(target[it]) or int(combPred[it]))
+                dictC["FN"] += (int(target[it]) ^ int(combPred[it])) and int(target[it])
+                self.classAccDictList[it] = dictC
 
-        def reportClassAccuracy(self):
-            """ Print to standard out, summary on the class accuracy. """
-            print("-----------------------------------------------")
-            print("TP = " + str(self.T_myClass))
-            print("TN = " + str(self.T_otherClass))
-            print("FP = " + str(self.F_myClass))
-            print("FN = " + str(self.F_otherClass))
-            print("-----------------------------------------------")
+        def microAverage(self):
+            e = 0.001
+            tpSum = 0
+            tnSum = 0
+            fpSum = 0
+            fnSum = 0
+            for l in range(cons.env.formatData.ClassCount):
+                dictC = self.classAccDictList[l].copy()
+                tpSum += dictC["TP"]
+                tnSum += dictC["TN"]
+                fpSum += dictC["FP"]
+                fnSum += dictC["FN"]
+            self.micro_precision = tpSum / (tpSum + fpSum + 1)
+            self.micro_recall = tpSum / (tpSum + fnSum + 1)
+            self.micro_f = 2 * (self.micro_precision * self.micro_recall) / (self.micro_precision + self.micro_recall + e)
+
+        def macroAverage(self):
+            e = 0.001
+            self.macro_precision = 0.0
+            self.macro_recall = 0.0
+            for l in range(cons.env.formatData.ClassCount):
+                dictC = self.classAccDictList[l].copy()
+                self.macro_precision += (dictC["TP"] / (dictC["TP"] + dictC["FP"] + 1))
+                self.macro_recall += (dictC["TP"] / (dictC["TP"] + dictC["FN"] + 1))
+            self.macro_precision /= cons.env.formatData.ClassCount
+            self.macro_recall /= cons.env.formatData.ClassCount
+            self.macro_f = 2 * (self.macro_precision * self.macro_recall) / (self.macro_precision + self.macro_recall + e)
+
 
         def ExHammingLoss(self, phenotypePrediction, true_phenotype, phenotype_conf, true_conf):
-            """Calculate extended Hamming loss value for the given prediction"""
+            """
+            Calculates the extended Hamming loss value for the given prediction according to 'Nazmi, Razegh-Jahromi,
+            Homaifar, Multi-label classification  with weighted labels using learning classifiers, IEEE SMC-2017.'
+            """
             it = 0
             Dist = 0.0
             if cons.env.formatData.areConfidence:
@@ -1899,6 +1920,13 @@ def MLRBC(arg):
 
         def getRankLossSingle(self):
             return self.rankLoss_single
+
+        def getMacroF(self):
+            return self.macro_f
+
+        def getMicroF(self):
+            return self.micro_f
+
 
         def reportMLperformance(self, measureList):
             print("Multi-label performance metrics report.......")
@@ -2103,17 +2131,13 @@ def MLRBC(arg):
             self.population.clearSets()  # Clears the match and correct sets for the next learning iteration
 
         def doPopEvaluation(self, isTrain):
-            Acc = ClassAccuracy()
+
             if isTrain:
                 myType = "TRAINING"
             else:
                 myType = "TESTING"
             noMatch = 0
             tie = 0
-            cons.env.resetDataRef(isTrain)  # Go to the first instance in dataset
-            phenotypeList = cons.env.formatData.phenotypeList
-            # ----------------------------------------------
-            classAccDict = {}
             Hloss = 0
             precision = 0
             accuracy = 0
@@ -2122,14 +2146,14 @@ def MLRBC(arg):
             oneError = 0
             rankLoss = 0
             MLperformance = {}
-            for each in phenotypeList:
-                classAccDict[each] = ClassAccuracy()
-            # ----------------------------------------------
+
+            cons.env.resetDataRef(isTrain)  # Go to the first instance in dataset
+            Acc = ClassAccuracy()
+
             if isTrain:
                 instances = cons.env.formatData.numTrainInstances
             else:
                 instances = cons.env.formatData.numTestInstances
-            # ----------------------------------------------------------------------------------------------
 
             save_path = RUN_RESULT_PATH
             fileName = cons.outFileName + '_Prediction_Compare'
@@ -2137,33 +2161,29 @@ def MLRBC(arg):
             predComp = open(completeName + '_' + str(exp) + '.txt', 'w')
             predComp.write('True label \t Max prediction \t Combined prediction \n')
 
-            for inst in range(instances):
-                if isTrain:
+            if isTrain:
+                """
+                training evaluation
+                """
+                for inst in range(instances):
                     state_phenotype_conf = cons.env.getTrainInstance()
-                else:
-                    state_phenotype_conf = cons.env.getTestInstance()
-                # -----------------------------------------------------------------------------
-                self.population.makeEvalMatchSet(state_phenotype_conf[0])
-                prediction = Prediction(self.population)
-                """
-                if isTrain:
-                    phenotypeSelection = prediction.getDecision()
-                    combVote = [0] * cons.env.formatData.ClassCount
-                else:
-                """
-                prediction.combinePredictions(self.population)
-                combPred = prediction.getCombPred()
-                combVote = prediction.getCombVote()
-                phenotypeSelection = combPred
+                    self.population.makeEvalMatchSet(state_phenotype_conf[0])
 
-                if phenotypeSelection == None:
-                    noMatch += 1
-                elif phenotypeSelection == 'Tie':
-                    tie += 1
-                else:  # Instances which failed to be covered are excluded from the accuracy calculation
-                    truePhenotype = state_phenotype_conf[1]
-                    if cons.env.formatData.MLphenotype:
-                        Acc.multiLablePerformace(phenotypeSelection, truePhenotype, combVote)
+                    prediction = Prediction(self.population)
+                    prediction.combinePredictions(self.population)
+                    combPred = prediction.getCombPred()
+                    combVote = prediction.getCombVote()
+                    #phenotypeSelection = prediction.getDecision()
+                    #combVote = [0] * cons.env.formatData.ClassCount
+                    if combPred == None:
+                        noMatch += 1
+                    elif combPred == 'Tie':
+                        tie += 1
+                    else:
+                        Acc.multiLablePerformace(combPred, state_phenotype_conf[1], combVote)
+                        """
+                        Sample-based metrics
+                        """
                         Hloss += Acc.getLossSingle()
                         precision += Acc.getPrecisionSingle()
                         accuracy += Acc.getAccuracySingle()
@@ -2171,30 +2191,59 @@ def MLRBC(arg):
                         fmeasure += Acc.getFmeasureSingle()
                         oneError += Acc.getOneErrorSingle()
                         rankLoss += Acc.getRankLossSingle()
-                    else:
-                        for each in phenotypeList:
-                            thisIsMe = False
-                            accuratePhenotype = False
-                            if each == truePhenotype:
-                                thisIsMe = True
-                            if phenotypeSelection == truePhenotype:
-                                accuratePhenotype = True
-                            classAccDict[each].updateAccuracy(thisIsMe, accuratePhenotype)
-                    if not isTrain:
-                        predComp.write(str(truePhenotype) + '\t' +  str(prediction.getDecision()) + '\t' + str(combVote) + '\n')
+                        """
+                        Class-based metrics
+                        """
+                        Acc.updateClassBased(state_phenotype_conf[1], combPred)
 
-                cons.env.newInstance(isTrain)
-                self.population.clearSets()
-                # ----------------------------------------------------------------------------------------------
-            # Calculate Standard Accuracy--------------------------------------------
-            instancesCorrectlyClassified = classAccDict[phenotypeList[0]].T_myClass + classAccDict[
-                phenotypeList[0]].T_otherClass
-            instancesIncorrectlyClassified = classAccDict[phenotypeList[0]].F_myClass + classAccDict[
-                phenotypeList[0]].F_otherClass
-            if (instancesCorrectlyClassified and instancesIncorrectlyClassified) != 0:
-                standardAccuracy = float(instancesCorrectlyClassified) / float(instancesCorrectlyClassified + instancesIncorrectlyClassified)
+                    cons.env.newInstance(isTrain)
+                    self.population.clearSets()
             else:
-                standardAccuracy = 0
+                """
+                test evaluation
+                """
+                for inst in range(instances):
+                    state_phenotype_conf = cons.env.getTestInstance()
+                    self.population.makeEvalMatchSet(state_phenotype_conf[0])
+
+                    prediction = Prediction(self.population)
+                    prediction.combinePredictions(self.population)
+                    combPred = prediction.getCombPred()
+                    combVote = prediction.getCombVote()
+                    if combPred == None:
+                        noMatch += 1
+                    elif combPred == 'Tie':
+                        tie += 1
+                    else:
+                        Acc.multiLablePerformace(combPred, state_phenotype_conf[1], combVote)
+                        """
+                        Sample-based metrics
+                        """
+                        Hloss += Acc.getLossSingle()
+                        precision += Acc.getPrecisionSingle()
+                        accuracy += Acc.getAccuracySingle()
+                        recall += Acc.getRecallSingle()
+                        fmeasure += Acc.getFmeasureSingle()
+                        oneError += Acc.getOneErrorSingle()
+                        rankLoss += Acc.getRankLossSingle()
+                        """
+                        Class-based metrics
+                        """
+                        Acc.updateClassBased(state_phenotype_conf[1], combPred)
+
+                    cons.env.newInstance(isTrain)
+                    self.population.clearSets()
+
+            """
+            micro-average metrics
+            """
+            Acc.microAverage()
+
+            """
+            macro-average metrics
+            """
+            Acc.macroAverage()
+
 
             MLperformance["HammingLoss"] = Hloss/float(instances)
             MLperformance["Precision"] = precision/float(instances)
@@ -2203,31 +2252,13 @@ def MLRBC(arg):
             MLperformance["F_measure"] = fmeasure/float(instances)
             MLperformance["oneError"] = oneError/float(instances)
             MLperformance["rankLoss"] = rankLoss/float(instances)
+            MLperformance["micro-F"] = Acc.getMicroF()
+            MLperformance["macro-F"] = Acc.getMacroF()
 
-
-            # Calculate Balanced Accuracy---------------------------------------------
-            T_mySum = 0
-            T_otherSum = 0
-            F_mySum = 0
-            F_otherSum = 0
-            for each in phenotypeList:
-                T_mySum += classAccDict[each].T_myClass
-                T_otherSum += classAccDict[each].T_otherClass
-                F_mySum += classAccDict[each].F_myClass
-                F_otherSum += classAccDict[each].F_otherClass
-            if float(T_otherSum + F_mySum) != 0:
-                balancedAccuracy = ((0.5 * T_mySum / (float(T_mySum + F_otherSum)) + 0.5 * T_otherSum / (float(T_otherSum + F_mySum))))  # BalancedAccuracy = (Specificity + Sensitivity)/2
-            else:
-                balancedAccuracy = 0
-
-            # Adjustment for uncovered instances - to avoid positive or negative bias we incorporate the probability of guessing a phenotype by chance (e.g. 50% if two phenotypes)
             predictionFail = float(noMatch) / float(instances)
             predictionTies = float(tie) / float(instances)
             instanceCoverage = 1.0 - predictionFail
             predictionMade = 1.0 - (predictionFail + predictionTies)
-
-            adjustedStandardAccuracy = (standardAccuracy * predictionMade) + ((1.0 - predictionMade) * (1.0 / float(len(phenotypeList))))
-            adjustedBalancedAccuracy = (balancedAccuracy * predictionMade) + ((1.0 - predictionMade) * (1.0 / float(len(phenotypeList))))
 
             # Adjusted Balanced Accuracy is calculated such that instances that did not match have a consistent probability of being correctly classified in the reported accuracy.
             print("-----------------------------------------------")
@@ -2236,10 +2267,8 @@ def MLRBC(arg):
             print("Instance Coverage: " + str(instanceCoverage * 100.0) + '%')
             print("Prediction Ties: " + str(predictionTies * 100.0) + '%')
             print("------------------------------------------------")
-            #print("The number of LPs discovered: " + str(len(self.population.labelPowerSetList)))
 
-            # Balanced and Standard Accuracies will only be the same when there are equal instances representative of each phenotype AND there is 100% covering.
-            resultList = [adjustedBalancedAccuracy, instanceCoverage, MLperformance]
+            resultList = [instanceCoverage, MLperformance]
             return resultList
 
         def doContPopEvaluation(self, isTrain):
@@ -2301,7 +2330,7 @@ def MLRBC(arg):
         def populationReboot(self):
             """ Manages the reformation of a previously saved eLCS classifier population. """
             # --------------------------------------------------------------------
-            try:  # Re-open track learning file for continued tracking of progress.
+            try:
                 self.learnTrackOut = open(cons.outFileName + '_LearnTrack.txt', 'a')
             except Exception as inst:
                 print(type(inst))
@@ -2347,14 +2376,14 @@ def MLRBC(arg):
             popStatsOut.write("Training Coverage\tTesting Coverage\tTraining Performance\tTest Performance\n")
 
             if cons.testFile != 'None':
+                popStatsOut.write(str(trainEval[0]) + "\t")
+                popStatsOut.write(str(testEval[0]) + "\t")
                 popStatsOut.write(str(trainEval[1]) + "\t")
-                popStatsOut.write(str(testEval[1]) + "\t")
-                popStatsOut.write(str(trainEval[2]) + "\t")
-                popStatsOut.write(str(testEval[2]) + "\n\n")
+                popStatsOut.write(str(testEval[1]) + "\n\n")
             elif cons.trainFile != 'None':
-                popStatsOut.write(str(trainEval[1]) + "\t")
+                popStatsOut.write(str(trainEval[0]) + "\t")
                 popStatsOut.write("NA\t")
-                popStatsOut.write(str(trainEval[2]) + "\t")
+                popStatsOut.write(str(trainEval[1]) + "\t")
                 popStatsOut.write("NA\n\n")
             else:
                 popStatsOut.write("NA\t")
