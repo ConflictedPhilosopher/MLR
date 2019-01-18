@@ -17,7 +17,7 @@ def MLRBC(arg):
     outFileName=DATA_HEADER							# Path/NewName for new algorithm output files. Note: Do not give a file extension, this is done automatically.
     learningIterations=str(NO_TRAIN_ITERATION)		# Specify complete algorithm evaluation checkpoints and maximum number of learning iterations (e.g. 1000.2000.5000 = A maximum of 5000 learning iterations with evaluations at 1000, 2000, and 5000 iterations)
     N=POP_SIZE									    	# Maximum size of the rule population (a.k.a. Micro-classifier population size, where N is the sum of the classifier numerosities in the population)
-    p_spec=0.3  									# The probability of specifying an attribute when covering. (1-p_spec = the probability of adding '#' in ternary rule representations). Greater numbers of attributes in a dataset will require lower values of p_spec.
+    p_spec=0.4 									# The probability of specifying an attribute when covering. (1-p_spec = the probability of adding '#' in ternary rule representations). Greater numbers of attributes in a dataset will require lower values of p_spec.
     exp = arg[0]
 
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -29,7 +29,7 @@ def MLRBC(arg):
     labelMissingData="NA"							# Label used for any missing data in the data set.
     discreteAttributeLimit = "NA"						# The maximum number of attribute states allowed before an attribute or phenotype is considered to be continuous (Set this value >= the number of states for any discrete attribute or phenotype in their dataset).
     discretePhenotypeLimit = "NA"
-    trackingFrequency = 10000						# Specifies the number of iterations before each estimated learning progress report by the algorithm ('0' = report progress every epoch, i.e. every pass through all instances in the training data).
+    trackingFrequency = 1000						# Specifies the number of iterations before each estimated learning progress report by the algorithm ('0' = report progress every epoch, i.e. every pass through all instances in the training data).
 
     ######----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Supervised Learning Parameters - Generally just use default values.
@@ -414,11 +414,11 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # GENERATE MATCHING CONDITION
             # -------------------------------------------------------
-            while len(self.specifiedAttList) < 1:
-                for attRef in range(len(state)):
-                    if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
-                        self.specifiedAttList.append(attRef)
-                        self.condition.append(self.buildMatch(attRef, state))
+            # while len(self.specifiedAttList) < 1:
+            for attRef in range(len(state)):
+                if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
+                    self.specifiedAttList.append(attRef)
+                    self.condition.append(self.buildMatch(attRef, state))
 
         def classifierCopy(self, clOld, exploreIter):
             """  Constructs an identical Classifier.  However, the experience of the copy is set to 0 and the numerosity
@@ -994,6 +994,11 @@ def MLRBC(arg):
             # ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
             return classifierString
 
+        def isOverGeneral(self):
+            if len(self.specifiedAttList) < 1:
+                return True
+            else:
+                return False
 
     class ClassifierSet:
         def __init__(self, a=None):
@@ -1075,7 +1080,7 @@ def MLRBC(arg):
             # -------------------------------------------------------
             cons.timer.startTimeMatching()
 
-            if len(self.popSet)>6000:
+            if len(self.popSet)>DISTRIBUTED_MATCHING_TH:
                 argList = []
                 for i in range(len(self.popSet)):
                     arg = [self.popSet[i], i, state]
@@ -1093,8 +1098,10 @@ def MLRBC(arg):
                                 self.popSet[i].phenotype[1]):  # Check for phenotype coverage
                             doCovering = False
             else:
-                for i in range(len(self.popSet)):  # Go through the population
+                for i in range(len(self.popSet)):
                     cl = self.popSet[i]  # One classifier at a time
+                    if cl.isOverGeneral():
+                        print("Found one!")
                     if cl.match(state):  # Check for match
                         self.matchSet.append(i)  # If match - add classifier to match set
                         setNumerositySum += cl.numerosity  # New Increment the set numerosity sum

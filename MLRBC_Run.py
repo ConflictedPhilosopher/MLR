@@ -74,7 +74,7 @@ def convertCSV(infilename, outfilename):
         df = pd.read_csv(infilename)
         Class = []
         for idx, row in df.iterrows():
-            label = row[NO_ATTRIBUTES:-1]
+            label = [int(l) for l in row[NO_ATTRIBUTES:-1]]
             newlabel = "".join(map(str, label))
             Class.append(newlabel)
 
@@ -100,11 +100,10 @@ def dataProp(infilename):
     :param infilename:
     :return:
     """
-
     df = pd.read_csv(infilename)
     Class = []
     for idx, row in df.iterrows():
-        label = row[NO_ATTRIBUTES:-1]
+        label = [int(l) for l in row[NO_ATTRIBUTES:-1]]
         newlabel = "".join(map(str, label))
         Class.append(newlabel)
 
@@ -157,7 +156,7 @@ if __name__== "__main__":
     random.seed(SEED_NUMBER)
     DataFileName = DATA_HEADER + "-csv.csv"
     completeDataFileName = os.path.join(DATA_FOLDER, DATA_HEADER, DataFileName)
-    #dataProp(completeDataFileName)
+    # dataProp(completeDataFileName)
 
     if NUMBER_OF_FOLDS < 2:
         numberOfExperiments = NO_EXPERIMENTS_AVERAGING

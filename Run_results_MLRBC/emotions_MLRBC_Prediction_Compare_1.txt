@@ -1,0 +1,1 @@
+True label 	 Max prediction 	 Combined prediction 
