@@ -6,7 +6,7 @@ import os.path
 from joblib import Parallel, delayed
 
 import numpy as np
-from sklearn.metrics import roc_auc_score, roc_curve, auc
+from sklearn.metrics import roc_curve, auc
 
 from config import *
 
@@ -14,50 +14,50 @@ def MLRBC(arg):
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Major Run Parameters - Essential to be set correctly for a successful run of the algorithm
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    outFileName=DATA_HEADER							# Path/NewName for new algorithm output files. Note: Do not give a file extension, this is done automatically.
-    learningIterations=str(NO_TRAIN_ITERATION)		# Specify complete algorithm evaluation checkpoints and maximum number of learning iterations (e.g. 1000.2000.5000 = A maximum of 5000 learning iterations with evaluations at 1000, 2000, and 5000 iterations)
-    N=POP_SIZE									    	# Maximum size of the rule population (a.k.a. Micro-classifier population size, where N is the sum of the classifier numerosities in the population)
-    p_spec=0.4 									# The probability of specifying an attribute when covering. (1-p_spec = the probability of adding '#' in ternary rule representations). Greater numbers of attributes in a dataset will require lower values of p_spec.
+    outFileName = DATA_HEADER							# Path/NewName for new algorithm output files. Note: Do not give a file extension, this is done automatically.
+    learningIterations = str(NO_TRAIN_ITERATION)		# Specify complete algorithm evaluation checkpoints and maximum number of learning iterations (e.g. 1000.2000.5000 = A maximum of 5000 learning iterations with evaluations at 1000, 2000, and 5000 iterations)
+    N = POP_SIZE									    # Maximum size of the rule population (a.k.a. Micro-classifier population size, where N is the sum of the classifier numerosities in the population)
+    p_spec = 0.5 									    # The probability of specifying an attribute when covering. (1-p_spec = the probability of adding '#' in ternary rule representations). Greater numbers of attributes in a dataset will require lower values of p_spec.
     exp = arg[0]
 
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Logistical Run Parameters
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    randomSeed=False								# Set a constant random seed value to some integer (in order to obtain reproducible results). Put 'False' if none (for pseudo-random algorithm runs).
-    labelInstanceID="InstanceID"					# Label for the data column header containing instance ID's.  If included label not found, algorithm assumes that no instance ID's were included.
-    labelPhenotype="Class"							# Label for the data column header containing the phenotype label. (Typically 'Class' for case/control datasets)
-    labelMissingData="NA"							# Label used for any missing data in the data set.
-    discreteAttributeLimit = "NA"						# The maximum number of attribute states allowed before an attribute or phenotype is considered to be continuous (Set this value >= the number of states for any discrete attribute or phenotype in their dataset).
+    randomSeed = False								# Set a constant random seed value to some integer (in order to obtain reproducible results). Put 'False' if none (for pseudo-random algorithm runs).
+    labelInstanceID = "InstanceID"					# Label for the data column header containing instance ID's.  If included label not found, algorithm assumes that no instance ID's were included.
+    labelPhenotype = "Class"							# Label for the data column header containing the phenotype label. (Typically 'Class' for case/control datasets)
+    labelMissingData = "NA"							# Label used for any missing data in the data set.
+    discreteAttributeLimit = "NA"					# The maximum number of attribute states allowed before an attribute or phenotype is considered to be continuous (Set this value >= the number of states for any discrete attribute or phenotype in their dataset).
     discretePhenotypeLimit = "NA"
     trackingFrequency = 1000						# Specifies the number of iterations before each estimated learning progress report by the algorithm ('0' = report progress every epoch, i.e. every pass through all instances in the training data).
 
     ######----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Supervised Learning Parameters - Generally just use default values.
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    nu=5											# (v) Power parameter used to determine the importance of high accuracy when calculating fitness. (typically set to 5, recommended setting of 1 in noisy data)
-    chi=0.8											# (X) The probability of applying crossover in the GA. (typically set to 0.5-1.0)
-    upsilon=0.04									# (u) The probability of mutating an allele within an offspring.(typically set to 0.01-0.05)
-    theta_GA=25										# The GA threshold; The GA is applied in a set when the average time since the last GA in the set is greater than theta_GA.
-    theta_del=20									# The deletion experience threshold; The calculation of the deletion probability changes once this threshold is passed.
-    theta_sub=20									# The subsumption experience threshold;
-    acc_sub=0.99									# Subsumption accuracy requirement
-    beta=0.1										# Learning parameter; Used in calculating average correct set size
-    delta=0.1										# Deletion parameter; Used in determining deletion vote calculation.
-    init_fit=0.01									# The initial fitness for a new classifier. (typically very small, approaching but not equal to zero)
-    fitnessReduction=0.1							# Initial fitness reduction in GA offspring rules.
+    nu = 5											# (v) Power parameter used to determine the importance of high accuracy when calculating fitness. (typically set to 5, recommended setting of 1 in noisy data)
+    chi = 0.8										# (X) The probability of applying crossover in the GA. (typically set to 0.5-1.0)
+    upsilon = 0.04									# (u) The probability of mutating an allele within an offspring.(typically set to 0.01-0.05)
+    theta_GA = 25									# The GA threshold; The GA is applied in a set when the average time since the last GA in the set is greater than theta_GA.
+    theta_del = 20									# The deletion experience threshold; The calculation of the deletion probability changes once this threshold is passed.
+    theta_sub = 20									# The subsumption experience threshold;
+    acc_sub = 0.99									# Subsumption accuracy requirement
+    beta = 0.1										# Learning parameter; Used in calculating average correct set size
+    delta = 0.1										# Deletion parameter; Used in determining deletion vote calculation.
+    init_fit = 0.01									# The initial fitness for a new classifier. (typically very small, approaching but not equal to zero)
+    fitnessReduction = 0.1							# Initial fitness reduction in GA offspring rules.
 
     ######-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Algorithm Heuristic Options
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    doSubsumption=1									# Activate Subsumption? (1 is True, 0 is False).  Subsumption is a heuristic that actively seeks to increase generalization in the rule population.
-    selectionMethod='tournament'		    		# Select GA parent selection strategy ('tournament' or 'roulette')
-    theta_sel=0.2									# The fraction of the correct set to be included in tournament selection.
+    doSubsumption = 0								# Activate Subsumption? (1 is True, 0 is False).  Subsumption is a heuristic that actively seeks to increase generalization in the rule population.
+    selectionMethod = 'tournament'		    		# Select GA parent selection strategy ('tournament' or 'roulette')
+    theta_sel = 0.2									# The fraction of the correct set to be included in tournament selection.
 
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### PopulationReboot - An option to begin LCS learning from an existing, saved rule population. Note that the training data is re-shuffled during a reboot.
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    doPopulationReboot=0							# Start eLCS from an existing rule population? (1 is True, 0 is False).
-    popRebootPath="None"
+    doPopulationReboot = 0							# Start eLCS from an existing rule population? (1 is True, 0 is False).
+    popRebootPath = "None"
 
 
     class Timer:
@@ -999,6 +999,7 @@ def MLRBC(arg):
                 return True
             else:
                 return False
+
 
     class ClassifierSet:
         def __init__(self, a=None):
@@ -2183,12 +2184,14 @@ def MLRBC(arg):
                     self.population.makeEvalMatchSet(state_phenotype_conf[0])
 
                     prediction = Prediction(self.population)
-                    prediction.combinePredictions(self.population)
-                    combPred = prediction.getCombPred()
-                    combVote = prediction.getCombVote()
-                    targetList[inst] = [int(l) for l in list(state_phenotype_conf[1])]
-                    #phenotypeSelection = prediction.getDecision()
-                    #combVote = [0] * cons.env.formatData.ClassCount
+                    if PREDICTION_METHOD == 'max':
+                        combPred = prediction.getDecision()
+                        combVote = [0] * cons.env.formatData.ClassCount
+                    else:
+                        prediction.combinePredictions(self.population)
+                        combPred = prediction.getCombPred()
+                        combVote = prediction.getCombVote()
+                    targetList[inst] = [int(l) for l in list(state_phenotype_conf[1])]     # The list of all target labels of the dataset
                     if combPred == None:
                         labelList[inst] = np.zeros(cons.env.formatData.ClassCount)
                         noMatch += 1
@@ -2224,10 +2227,14 @@ def MLRBC(arg):
                     self.population.makeEvalMatchSet(state_phenotype_conf[0])
 
                     prediction = Prediction(self.population)
-                    prediction.combinePredictions(self.population)
-                    combPred = prediction.getCombPred()
-                    combVote = prediction.getCombVote()
-                    targetList[inst] = [int(l) for l in list(state_phenotype_conf[1])]
+                    if PREDICTION_METHOD == 'max':
+                        combPred = prediction.getDecision()
+                        combVote = [0] * cons.env.formatData.ClassCount
+                    else:
+                        prediction.combinePredictions(self.population)
+                        combPred = prediction.getCombPred()
+                        combVote = prediction.getCombVote()
+                    targetList[inst] = [int(l) for l in list(state_phenotype_conf[1])]   # The list of all target labels of the dataset
                     if combPred == None:
                         noMatch += 1
                         labelList[inst] = np.zeros(cons.env.formatData.ClassCount)
