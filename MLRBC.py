@@ -216,9 +216,10 @@ def MLRBC(arg):
             self.learningIterations = learningIterations  # par['learningIterations']                     #Saved as text
             self.N = N  # int(par['N'])                                                  #Saved as integer
             self.p_spec = p_spec  # float(par['p_spec'])                                      #Saved as float
+            self.majLP = arg[2]
+            self.minLP = arg[3]
 
             # Logistical Run Parameters ------------------------------------------------------------------------------------
-            # if par['randomSeed'] == 'False' or par['randomSeed'] == 'false':
             if randomSeed == False:
                 self.useSeed = False  # Saved as Boolean
             else:
@@ -369,7 +370,8 @@ def MLRBC(arg):
             self.initTimeStamp = None  # Iteration in which the rule first appeared.
 
             # Classifier Accuracy Tracking -------------------------------------
-            self.matchCount = 0  # Known in many LCS implementations as experience i.e. the total number of times this classifier was in a match set
+            self.matchCount = 0  # Known in many LCS implementations as experience, i.e. the total number of times this classifier was in a match set
+            self.experience = {}
             self.correctCount = 0  # The total number of times this classifier was in a correct set
             self.loss = 0
             self.precision = 0
@@ -864,15 +866,15 @@ def MLRBC(arg):
         # PARAMETER UPDATES
         # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         def updateAccuracy(self):
-            if cons.env.formatData.discretePhenotype:
+            if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
                 self.accuracy = self.correctCount / float(self.matchCount)
             else:
                 if random.random() < 0.5:
                     self.accuracy = self.precision / float(self.matchCount)
                 else:
                     self.accuracy = self.recall / float(self.matchCount)
-                #self.accuracy = 1 - (self.loss / float(self.matchCount))
-                self.accuracy = 1 - (self.f1 / float(self.matchCount))
+                    #self.accuracy = 1 - (self.loss / float(self.matchCount))
+                    self.accuracy = 1 - (self.f1 / float(self.matchCount))
 
 
         def updateFitness(self):
@@ -897,8 +899,12 @@ def MLRBC(arg):
             else:
                 self.aveMatchSetSize = self.aveMatchSetSize + cons.beta * (matchSetSize - self.aveMatchSetSize)
 
-        def updateExperience(self):
+        def updateExperience(self, TruePhenotype):
             """ Increases the experience of the classifier by one. Once an epoch has completed, rule accuracy can't change."""
+            if TruePhenotype in self.experience.keys():
+                self.experience[TruePhenotype] += 1
+            else:
+                self.experience[TruePhenotype] = 1
             self.matchCount += 1
 
         def updateCorrect(self):
@@ -1017,6 +1023,10 @@ def MLRBC(arg):
             self.attributeSpecList = []
             self.attributeAccList = []
             self.avePhenotypeRange = 0.0
+            self.theta_GA = cons.theta_GA
+            self.aveNumerosity = 0.0
+            self.majLP = cons.majLP
+            self.minLP = cons.minLP
 
             # Set Constructors-------------------------------------
             if a == None:
@@ -1075,6 +1085,7 @@ def MLRBC(arg):
             phenotype = state_phenotype[1]
             doCovering = True  # Covering check: Twofold (1)checks that a match is present, and (2) that at least one match dictates the correct phenotype.
             setNumerositySum = 0  # new
+            k = 2
 
             # -------------------------------------------------------
             # MATCHING
@@ -1086,7 +1097,6 @@ def MLRBC(arg):
                 for i in range(len(self.popSet)):
                     arg = [self.popSet[i], i, state]
                     argList.append(arg)
-
                 match = Parallel(n_jobs=15, verbose=0, backend="threading")(map(delayed(self.singleMatchThread), argList))
                 self.matchSet = [x for x in match if x != None]
                 for i in self.matchSet:
@@ -1101,8 +1111,20 @@ def MLRBC(arg):
             else:
                 for i in range(len(self.popSet)):
                     cl = self.popSet[i]  # One classifier at a time
-                    if cl.isOverGeneral():
-                        print("Found one!")
+
+                    # theta_GA adaptation algorithm
+                    if ADAPT_THETA_GA:
+                        if cl.isOverGeneral():
+                            print("Found one!")
+                            try:
+                                IR = cl.experience[self.majLP] / (cl.experience[self.majLP] + cl.experience[self.minLP])
+                                if IR < 2000 and cl.numerosity > self.aveNumerosity:
+                                    self.theta_GA = k * (cl.experience[self.majLP] + cl.experience[self.minLP])/ cl.experience[self.minLP]
+                            except KeyError:
+                                pass
+                    else:
+                        pass
+                    #---------------
                     if cl.match(state):  # Check for match
                         self.matchSet.append(i)  # If match - add classifier to match set
                         setNumerositySum += cl.numerosity  # New Increment the set numerosity sum
@@ -1115,9 +1137,10 @@ def MLRBC(arg):
                             if float(cl.phenotype[0]) <= float(phenotype) <= float(
                                     cl.phenotype[1]):  # Check for phenotype coverage
                                 doCovering = False
-
-
-
+                try:
+                    self.aveNumerosity = setNumerositySum / len(self.popSet)
+                except ZeroDivisionError:
+                    self.aveNumerosity = 1
             cons.timer.stopTimeMatching()  # new
 
             # -------------------------------------------------------
@@ -1128,6 +1151,7 @@ def MLRBC(arg):
                 self.addClassifierToPopulation(newCl, True)
                 self.matchSet.append(len(self.popSet) - 1)  # Add covered classifier to matchset
                 doCovering = False
+
 
         def makeCorrectSet(self, phenotype):
             for i in range(len(self.matchSet)):
@@ -1240,7 +1264,7 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # GA RUN REQUIREMENT
             # -------------------------------------------------------
-            if (exploreIter - self.getIterStampAverage()) < cons.theta_GA:  # Does the correct set meet the requirements for activating the GA?
+            if (exploreIter - self.getIterStampAverage()) < self.theta_GA:  # Does the correct set meet the requirements for activating the GA?
                 return
 
             self.setIterStamps(exploreIter)  # Updates the iteration time stamp for all rules in the correct set (which the GA opperates in).
@@ -1461,7 +1485,7 @@ def MLRBC(arg):
                 matchSetNumerosity += self.popSet[ref].numerosity
 
             for ref in self.matchSet:
-                self.popSet[ref].updateExperience()
+                self.popSet[ref].updateExperience(state_phenotype_conf[1])
                 self.popSet[ref].updateMatchSetSize(matchSetNumerosity)
                 # self.popSet[ref].updateLoss(state_phenotype_conf[1])  # will not be necessary
                 if ref in self.correctSet:
@@ -1560,7 +1584,7 @@ def MLRBC(arg):
 
         def getPopTrack(self, Hloss, accuracy, exploreIter, trackingFrequency):
             """ Returns a formated output string to be printed to the Learn Track output file. """
-            trackString = str(exploreIter) + "\t" + str(len(self.popSet)) + "\t" + str(self.microPopSize) + "\t" + str(Hloss) + "\t" + str("%.2f" % self.aveGenerality) + "\t" + str(
+            trackString = str(exploreIter) + "\t" + str(len(self.popSet)) + "\t" + str(self.microPopSize) + "\t" + str(Hloss) + "\t" + str(accuracy) + "\t" + str("%.2f" % self.aveGenerality) + "\t" + str(
                 "%.2f" % cons.timer.returnGlobalTimer()) + "\n"
             if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:  # discrete phenotype
                 print(("Epoch: " + str(int(exploreIter / trackingFrequency)) + "\t Iteration: " + str(
@@ -2019,7 +2043,6 @@ def MLRBC(arg):
                     trackedHloss = sum(self.hloss) / float(cons.trackingFrequency)
                     self.learnTrackOut.write(self.population.getPopTrack(round(trackedHloss,3), trackedAccuracy, self.exploreIter + 1,
                                                                          cons.trackingFrequency))  # Report learning progress to standard out and tracking file.
-
                 cons.timer.stopTimeEvaluation()
 
                 # -------------------------------------------------------
@@ -2057,10 +2080,6 @@ def MLRBC(arg):
                                                       self.population, self.correct)
                     OutputFileManager().writePop(cons.outFileName, self.exploreIter + 1, self.population)
                     # ----------------------------------------------------------------------------------------------------------------------------
-
-                    print("Continue Learning...")
-                    print(
-                        "-------------------------------------------------------------------------------------------------------------------------")
 
                 # -------------------------------------------------------
                 # ADJUST MAJOR VALUES FOR NEXT ITERATION
@@ -2102,8 +2121,10 @@ def MLRBC(arg):
                 if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
                     if phenotypePrediction == state_phenotype_conf[1]:
                         self.correct[exploreIter % cons.trackingFrequency] = 1
+                        self.hloss[exploreIter % cons.trackingFrequency] = 0
                     else:
                         self.correct[exploreIter % cons.trackingFrequency] = 0
+                        self.hloss[exploreIter % cons.trackingFrequency] = Acc.hammingLoss(phenotypePrediction, state_phenotype_conf[1])
                 # -------------------------------------------------------
                 # CONTINUOUS PHENOTYPE PREDICTION
                 # -------------------------------------------------------
