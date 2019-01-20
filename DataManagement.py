@@ -10,7 +10,7 @@ class DataManage:
         self.labelMissingData = "NA"  # Label used for any missing data in the data set.
         self.discreteAttributeLimit = 2  # The maximum number of attribute states allowed before an attribute or phenotype is selfidered to be continuous (Set this value >= the number of states for any discrete attribute or phenotype in their dataset).
         self.discretePhenotypeLimit = 5000
-        self.sampleSize = 0.1
+        self.sampleSize = 1.0
 
         # Initialize global variables-------------------------------------------------
         self.numAttributes = None  # The number of attributes in the input file.

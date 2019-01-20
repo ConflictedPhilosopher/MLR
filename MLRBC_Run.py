@@ -54,6 +54,9 @@ class averageTrack():
         d = [row[3] for row in datasetList]  # Hamming loss
         e = [row[4] for row in datasetList]  # Accuracy
         f = [row[5] for row in datasetList]  # Generality
+        g = [row[7] for row in datasetList]  # TP
+        h = [row[7] for row in datasetList]  # TN
+
         self.IterNum = a[0:int(len(a) / self.NumberOfExperiments)]
 
         if PLOT_SETTING[0]:
@@ -78,6 +81,7 @@ class averageTrack():
             plt.plot(self.IterNum, self.microPopSize_ave, 'b-', label='MicroPopSize')
             legend = plt.legend(loc='center', shadow=True, fontsize='large')
             plt.xlabel('Iteration')
+            plt.ylim([0, 1])
 
         if PLOT_SETTING[1]:
             accuracyEstimate = []
@@ -92,6 +96,7 @@ class averageTrack():
             plt.plot(self.IterNum, self.accuracyEstimate_ave, 'b-', label = 'Accuracy Estimate')
             legend = plt.legend(loc='center', shadow=True, fontsize='large')
             plt.xlabel('Iteration')
+            plt.ylim([0, 1])
 
         if PLOT_SETTING[2]:
             hlossEstimate = []
@@ -106,6 +111,7 @@ class averageTrack():
             plt.plot(self.IterNum, self.hlossEstimate_ave, '-b', label = "Hamming loss")
             legend = plt.legend(loc='center', shadow=True, fontsize='large')
             plt.xlabel('Iteration')
+            plt.ylim([0, 1])
 
         if PLOT_SETTING[3]:
             aveGenerality = []
@@ -120,6 +126,31 @@ class averageTrack():
             plt.plot(self.IterNum, self.aveGenerality_ave, 'b-', label='AveGenerality')
             legend = plt.legend(loc='center', shadow=True, fontsize='large')
             plt.xlabel('Iteration')
+            plt.ylim([0, 1])
+
+        if PLOT_SETTING[4]:
+            TP = []
+            self.tp_ave = []
+            for i in range(self.NumberOfExperiments):
+                TP.append((g[i * int(len(a) / self.NumberOfExperiments):(i + 1) * int(len(a) / self.NumberOfExperiments)]))
+            TP = np.sum(TP, axis=0)
+            for x in TP:
+                self.tp_ave.append(x / self.NumberOfExperiments)
+
+            TN = []
+            self.tn_ave = []
+            for i in range(self.NumberOfExperiments):
+                TN.append((h[i * int(len(a) / self.NumberOfExperiments):(i + 1) * int(len(a) / self.NumberOfExperiments)]))
+            TN = np.sum(TN, axis=0)
+            for x in TN:
+                self.tn_ave.append(x / self.NumberOfExperiments)
+
+            plt.figure(5)
+            plt.plot(self.IterNum, self.tp_ave, 'b-', label='TP')
+            plt.plot(self.IterNum, self.tn_ave, 'r-', label='TN')
+            legend = plt.legend(loc='center', shadow=True, fontsize='small')
+            plt.xlabel('Iteration')
+            plt.ylim(bottom = 0.0)
 
         plt.show()
 
@@ -218,17 +249,35 @@ class parallelRun():
             Parallel(n_jobs = NO_PARALLEL_JOBS, verbose=1, backend="threading")(map(delayed(MLRBC.MLRBC), arg_instances))
         else:
             if (NO_EXPERIMENTS_AVERAGING > 1):
-                trainFileName = TRAIN_DATA_HEADER + ".txt"
-                completeTrainFileName = os.path.join(DATA_FOLDER, trainFileName)
-                validFileName = VALID_DATA_HEADER + ".txt"
-                completeValidFileName = os.path.join(DATA_FOLDER, validFileName)
+                completeTrainFileName = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + ".txt")
+                completeValidFileName = os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + ".txt")
+                trainDataCSV = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + "-csv.csv")
+                validDataCSV = os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + "-csv.csv")
+                completeDataFileName = os.path.join(DATA_FOLDER, DATA_HEADER, DATA_HEADER + "-csv.csv")
+
+                if os.path.isfile(completeTrainFileName):      # training.txt exists
+                    pass
+                else:
+                    if os.path.isfile(trainDataCSV):           # training.csv exists
+                        convertCSV2TXT(trainDataCSV, completeTrainFileName)
+                        convertCSV2TXT(validDataCSV, completeValidFileName)
+                    elif os.path.isfile(completeDataFileName):        # no data split exists, searching for complete.csv
+                        completeData = pd.read_csv(completeDataFileName)
+                        data_train, data_valid = train_test_split(completeData, test_size = 1 - self.defaultSplit,
+                                                                     random_state = SEED_NUMBER)
+                        data_train.to_csv(trainDataCSV)
+                        data_valid.to_csv(validDataCSV)
+                        convertCSV2TXT(os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + "-csv.csv"), completeTrainFileName)
+                        convertCSV2TXT(os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + "-csv.csv"), completeValidFileName)
                 dataManage = DataManage(completeTrainFileName, completeValidFileName)
                 for it in range(NO_EXPERIMENTS_AVERAGING):
                     argument = []
                     argument.append(it + 1)
                     argument.append(dataManage)
+                    argument.append(self.majLP)
+                    argument.append(self.minLP)
                     arg_instances.append(argument)
-                Parallel(n_jobs = NO_PARALLEL_JOBS, verbose = 1, backend = "threading")(map(delayed(UCS.UCS_model), arg_instances))
+                Parallel(n_jobs = NO_PARALLEL_JOBS, verbose = 1, backend = "threading")(map(delayed(MLRBC.MLRBC), arg_instances))
             else:
                 completeTrainFileName = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + ".txt")
                 completeValidFileName = os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + ".txt")
@@ -248,10 +297,9 @@ class parallelRun():
                                                                      random_state = SEED_NUMBER)
                         data_train.to_csv(trainDataCSV)
                         data_valid.to_csv(validDataCSV)
-                        convertCSV2TXT(os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + ".csv"), completeTrainFileName)
-                        convertCSV2TXT(os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + ".csv"), completeValidFileName)
+                        convertCSV2TXT(os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + "-csv.csv"), completeTrainFileName)
+                        convertCSV2TXT(os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + "-csv.csv"), completeValidFileName)
                 dataManage = DataManage(completeTrainFileName, completeValidFileName)
-
                 MLRBC.MLRBC([1, dataManage, self.majLP, self.minLP])
 
 

@@ -1582,10 +1582,10 @@ def MLRBC(arg):
                         self.attributeSpecList[ref] += cl.numerosity
                         self.attributeAccList[ref] += cl.numerosity * cl.accuracy
 
-        def getPopTrack(self, Hloss, accuracy, exploreIter, trackingFrequency):
+        def getPopTrack(self, Hloss, accuracy, exploreIter, trackingFrequency, TP, TN):
             """ Returns a formated output string to be printed to the Learn Track output file. """
             trackString = str(exploreIter) + "\t" + str(len(self.popSet)) + "\t" + str(self.microPopSize) + "\t" + str(Hloss) + "\t" + str(accuracy) + "\t" + str("%.2f" % self.aveGenerality) + "\t" + str(
-                "%.2f" % cons.timer.returnGlobalTimer()) + "\n"
+                "%.2f" % cons.timer.returnGlobalTimer() + "\t" + str(TP) + "\t" + str(TN)) + "\n"
             if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:  # discrete phenotype
                 print(("Epoch: " + str(int(exploreIter / trackingFrequency)) + "\t Iteration: " + str(
                     exploreIter) + "\t MacroPop: " + str(len(self.popSet)) + "\t MicroPop: " + str(
@@ -1998,13 +1998,14 @@ def MLRBC(arg):
                     print('cannot open', cons.outFileName + '_LearnTrack.txt')
                     raise
                 else:
-                    self.learnTrackOut.write("Explore_Iteration\tMacroPopSize\tMicroPopSize\tHamming_Loss\tAveGenerality\tTime(min)\n")
+                    self.learnTrackOut.write("Explore_Iteration\tMacroPopSize\tMicroPopSize\tHamming_Loss\tAccuracy\tAveGenerality\tTime(min)\tTP\tTN\n")
                 # Instantiate Population---------
                 self.population = ClassifierSet()
                 self.exploreIter = 0
                 self.correct = [0.0 for i in range(cons.trackingFrequency)]
                 self.hloss = [1 for i in range(cons.trackingFrequency)]
-                self.Pr = [0.0 for i in range(cons.trackingFrequency)]
+                self.tp = [0.0 for i in range(cons.trackingFrequency)]
+                self.tn = [0.0 for i in range(cons.trackingFrequency)]
 
             # Run the eLCS algorithm-------------------------------------------------------------------------------
             self.run_eLCS()
@@ -2041,8 +2042,10 @@ def MLRBC(arg):
                     self.population.runPopAveEval(self.exploreIter)
                     trackedAccuracy = sum(self.correct) / float(cons.trackingFrequency)  # Accuracy over the last "trackingFrequency" number of iterations.
                     trackedHloss = sum(self.hloss) / float(cons.trackingFrequency)
+                    trackedTP = sum(self.tp) / float(cons.trackingFrequency)
+                    trackedTN = sum(self.tn) / float(cons.trackingFrequency)
                     self.learnTrackOut.write(self.population.getPopTrack(round(trackedHloss,3), trackedAccuracy, self.exploreIter + 1,
-                                                                         cons.trackingFrequency))  # Report learning progress to standard out and tracking file.
+                                                                         cons.trackingFrequency, trackedTP, trackedTN))  # Report learning progress to standard out and tracking file.
                 cons.timer.stopTimeEvaluation()
 
                 # -------------------------------------------------------
@@ -2119,6 +2122,14 @@ def MLRBC(arg):
                 # DISCRETE PHENOTYPE PREDICTION
                 # -------------------------------------------------------
                 if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
+                    target = state_phenotype_conf[1]
+                    tp = 0
+                    tn = 0
+                    for it in range(cons.env.formatData.ClassCount):
+                        tp += int(target[it]) and int(phenotypePrediction[it])
+                        tn += not (int(target[it]) or int(phenotypePrediction[it]))
+                    self.tp[exploreIter % cons.trackingFrequency] = tp
+                    self.tn[exploreIter % cons.trackingFrequency] = tn
                     if phenotypePrediction == state_phenotype_conf[1]:
                         self.correct[exploreIter % cons.trackingFrequency] = 1
                         self.hloss[exploreIter % cons.trackingFrequency] = 0
@@ -2298,7 +2309,6 @@ def MLRBC(arg):
             for l in range(cons.env.formatData.ClassCount):
                 fpr[l], tpr[l], _ = roc_curve(targetList[:, l], labelList[:, l])
                 roc_auc[l] = auc(fpr[l], tpr[l])
-
             where_are_NaNs = np.isnan(roc_auc)
             roc_auc[where_are_NaNs] = 0.0
 
