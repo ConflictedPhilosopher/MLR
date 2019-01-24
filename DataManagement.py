@@ -2,7 +2,7 @@ import random
 from config import *
 
 class DataManage:
-    def __init__(self, trainFile, testFile):
+    def __init__(self, trainFile, testFile, classCount, dataInfo):
 
         random.seed(SEED_NUMBER)
         self.labelInstanceID = "InstanceID"  # Label for the data column header containing instance ID's.  If included label not found, algorithm assumes that no instance ID's were included.
@@ -10,7 +10,8 @@ class DataManage:
         self.labelMissingData = "NA"  # Label used for any missing data in the data set.
         self.discreteAttributeLimit = 2  # The maximum number of attribute states allowed before an attribute or phenotype is selfidered to be continuous (Set this value >= the number of states for any discrete attribute or phenotype in their dataset).
         self.discretePhenotypeLimit = 5000
-        self.sampleSize = 1.0
+        self.classCount = classCount
+        self.dataInfo = dataInfo
 
         # Initialize global variables-------------------------------------------------
         self.numAttributes = None  # The number of attributes in the input file.
@@ -45,7 +46,7 @@ class DataManage:
 
         self.discriminatePhenotype(data4Formating)  # Determine if endpoint/phenotype is discrete or continuous.
         if self.discretePhenotype or self.MLphenotype:
-            self.discriminateClasses(data4Formating)  # Detect number of unique phenotype identifiers.
+            self.discriminateClasses(rawTrainData, rawTestData)  # Detect number of unique phenotype identifiers.
         # else:
         #     self.characterizePhenotype(data4Formating)
 
@@ -54,12 +55,12 @@ class DataManage:
 
         # Format and Shuffle Datasets----------------------------------------------------------------------------------------
         if testFile != 'None':
-            testFormatted = self.formatData(rawTestData)  # Stores the formatted testing data set used throughout the algorithm.
-            self.testFormatted = self.sampleData(testFormatted, 0.3)
+            self.testFormatted = self.formatData(rawTestData)  # Stores the formatted testing data set used throughout the algorithm.
+            # self.testFormatted = self.sampleData(testFormatted, 0.3)
             self.numTestInstances = len(self.testFormatted)
 
-        trainFormatted = self.formatData(rawTrainData)  # Stores the formatted training data set used throughout the algorithm.
-        self.trainFormatted = self.sampleData(trainFormatted, self.sampleSize)
+        self.trainFormatted = self.formatData(rawTrainData)  # Stores the formatted training data set used throughout the algorithm.
+        # self.trainFormatted = self.sampleData(trainFormatted, self.sampleSize)
         self.numTrainInstances = len(self.trainFormatted)
         print("----------------------------------------------------------------------------")
 
@@ -120,7 +121,7 @@ class DataManage:
         # Store number of instances in training data
         self.numTrainInstances = len(rawTrainData)
         # print("DataManagement: Number of Attributes = " + str(self.numAttributes))
-        print("DataManagement: Number of Instances = " + str(self.numTrainInstances))
+        print("DataManagement: Number of training instances = " + str(self.numTrainInstances))
 
     def discriminatePhenotype(self, rawData):
         """ Determine whether the phenotype is Discrete(class-based) or Continuous """
@@ -150,18 +151,27 @@ class DataManage:
         else:
             print("DataManagement: Phenotype Detected as Discrete.")
 
-    def discriminateClasses(self, rawData):
+    def discriminateClasses(self, rawTrain, rawTest):
         """ Determines number of classes and their identifiers. Only used if phenotype is discrete. """
         # print("DataManagement: Detecting Classes...")
         inst = 0
-        while inst < (self.numTrainInstances + self.numTestInstances):
-            target = rawData[inst][self.phenotypeRef]
+        while inst < (len(rawTrain)):
+            target = rawTrain[inst][self.phenotypeRef]
             if target in self.phenotypeList:
                 pass
             else:
                 self.phenotypeList.append(target)
             inst += 1
+        print("Datamanagement: " + str(len(self.phenotypeList))+ " unique LPs detected for training data. ")
+        temp = len(self.phenotypeList)
 
+        for inst in range(len(rawTest)):
+            target = rawTest[inst][self.phenotypeRef]
+            if target in self.phenotypeList:
+                pass
+            else:
+                self.phenotypeList.append(target)
+        print("Datamanagement: " + str(len(self.phenotypeList) - temp) + " new unique LPs detected for test data.")
         # if self.MLphenotype:
             # print("Datamanagement: " + str(len(classCount)) + " unique label powersets are detected" )
             #for each in list(classCount.keys()):
@@ -189,7 +199,7 @@ class DataManage:
         # Stores the number of instances in the testing data.
         self.numTestInstances = len(rawTestData)
         # print("DataManagement: Number of Attributes = " + str(self.numAttributes))
-        print("DataManagement: Number of Instances = " + str(self.numTestInstances))
+        print("DataManagement: Number of test instances = " + str(self.numTestInstances))
 
     def discriminateAttributes(self, rawData):
         """ Determine whether attributes in dataset are discrete or continuous and saves this information. """
@@ -219,7 +229,7 @@ class DataManage:
                 else:
                     self.attributeInfo.append([1, [float(target), float(target)]])  # [min,max]
                     self.continuousCount += 1
-        print("DataManagement: Identified " + str(self.discreteCount) + " discrete and " + str(self.continuousCount) + " continuous attributes.")  # Debug
+        # print("DataManagement: Identified " + str(self.discreteCount) + " discrete and " + str(self.continuousCount) + " continuous attributes.")  # Debug
 
     def characterizeAttributes(self, rawData):
         """ Determine range (if continuous) or states (if discrete) for each attribute and saves this information"""
@@ -299,9 +309,3 @@ class DataManage:
         random.shuffle(formatted)  # One time randomization of the order the of the instances in the data, so that if the data was ordered by phenotype, this potential learning bias (based on instance ordering) is eliminated.
         return formatted
 
-    def sampleData(self, inData, sampleRate):
-        sampleCount = round(len(inData) * sampleRate)
-        outData = []
-        for it in range(sampleCount):
-            outData.append(inData[it][:])
-        return outData

@@ -17,7 +17,7 @@ def MLRBC(arg):
     outFileName = DATA_HEADER							# Path/NewName for new algorithm output files. Note: Do not give a file extension, this is done automatically.
     learningIterations = str(NO_TRAIN_ITERATION)		# Specify complete algorithm evaluation checkpoints and maximum number of learning iterations (e.g. 1000.2000.5000 = A maximum of 5000 learning iterations with evaluations at 1000, 2000, and 5000 iterations)
     N = POP_SIZE									    # Maximum size of the rule population (a.k.a. Micro-classifier population size, where N is the sum of the classifier numerosities in the population)
-    p_spec = 0.5 									    # The probability of specifying an attribute when covering. (1-p_spec = the probability of adding '#' in ternary rule representations). Greater numbers of attributes in a dataset will require lower values of p_spec.
+    p_spec = 0.7 									    # The probability of specifying an attribute when covering. (1-p_spec = the probability of adding '#' in ternary rule representations). Greater numbers of attributes in a dataset will require lower values of p_spec.
     exp = arg[0]
 
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1025,8 +1025,9 @@ def MLRBC(arg):
             self.avePhenotypeRange = 0.0
             self.theta_GA = cons.theta_GA
             self.aveNumerosity = 0.0
-            self.majLP = cons.majLP
-            self.minLP = cons.minLP
+            self.majLP = cons.majLP   # majority Label Powerset
+            self.minLP = cons.minLP   # minority Label Powerset
+            self.genAveAcc = 0  # Average accuracy of the over-general classifiers
 
             # Set Constructors-------------------------------------
             if a == None:
@@ -1086,6 +1087,8 @@ def MLRBC(arg):
             doCovering = True  # Covering check: Twofold (1)checks that a match is present, and (2) that at least one match dictates the correct phenotype.
             setNumerositySum = 0  # new
             k = 2
+            overGenCount = 0
+            overGenAccSum = 0
 
             # -------------------------------------------------------
             # MATCHING
@@ -1111,6 +1114,10 @@ def MLRBC(arg):
             else:
                 for i in range(len(self.popSet)):
                     cl = self.popSet[i]  # One classifier at a time
+                    # calculate the average accuracy and count of over-general classifiers
+                    if cl.isOverGeneral():
+                        overGenCount += 1
+                        overGenAccSum += cl.accuracy
 
                     # theta_GA adaptation algorithm
                     if ADAPT_THETA_GA:
@@ -1139,9 +1146,13 @@ def MLRBC(arg):
                                 doCovering = False
                 try:
                     self.aveNumerosity = setNumerositySum / len(self.popSet)
+                    self.overGenAcc = overGenAccSum / overGenCount
+                    # print("Over-general classifier count and average accuracy: ", overGenCount, overGenAcc)
                 except ZeroDivisionError:
                     self.aveNumerosity = 1
+                    self.overGenAcc = 0
             cons.timer.stopTimeMatching()  # new
+
 
             # -------------------------------------------------------
             # COVERING
@@ -1550,14 +1561,13 @@ def MLRBC(arg):
         def runPopAveEval(self, exploreIter):
             """ Calculates some summary evaluations across the rule population including average generality. """
             genSum = 0
-            agedCount = 0
             for cl in self.popSet:
                 genSum += ((cons.env.formatData.numAttributes - len(cl.condition)) / float(cons.env.formatData.numAttributes))
+
             if self.microPopSize == 0:
                 self.aveGenerality = 'NA'
             else:
                 self.aveGenerality = genSum / float(self.microPopSize)
-
                 # -------------------------------------------------------
             # CONTINUOUS PHENOTYPE
             # -------------------------------------------------------
@@ -1582,10 +1592,11 @@ def MLRBC(arg):
                         self.attributeSpecList[ref] += cl.numerosity
                         self.attributeAccList[ref] += cl.numerosity * cl.accuracy
 
-        def getPopTrack(self, Hloss, accuracy, exploreIter, trackingFrequency, TP, TN):
+        def getPopTrack(self, Hloss, accuracy, exploreIter, trackingFrequency, TP, TN, OverGenAcc):
             """ Returns a formated output string to be printed to the Learn Track output file. """
             trackString = str(exploreIter) + "\t" + str(len(self.popSet)) + "\t" + str(self.microPopSize) + "\t" + str(Hloss) + "\t" + str(accuracy) + "\t" + str("%.2f" % self.aveGenerality) + "\t" + str(
-                "%.2f" % cons.timer.returnGlobalTimer() + "\t" + str(TP) + "\t" + str(TN)) + "\n"
+                "%.2f" % cons.timer.returnGlobalTimer() + "\t" + str(TP) + "\t" + str(TN) + "\t" + str("%.3f" % OverGenAcc))  + "\n"
+            """
             if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:  # discrete phenotype
                 print(("Epoch: " + str(int(exploreIter / trackingFrequency)) + "\t Iteration: " + str(
                     exploreIter) + "\t MacroPop: " + str(len(self.popSet)) + "\t MicroPop: " + str(
@@ -1595,7 +1606,7 @@ def MLRBC(arg):
                     exploreIter) + "\t MacroPop: " + str(len(self.popSet)) + "\t MicroPop: " + str(
                     self.microPopSize) + "\t AccEstimate: " + str(accuracy) + "\t AveGen: " + str(
                     "%.2f" % self.aveGenerality) + "\t PhenRange: " + str(self.avePhenotypeRange) + "\t Time: " + str(
-                    "%.2f" % cons.timer.returnGlobalTimer())))
+                    "%.2f" % cons.timer.returnGlobalTimer())))"""
 
             return trackString
 
@@ -1998,7 +2009,7 @@ def MLRBC(arg):
                     print('cannot open', cons.outFileName + '_LearnTrack.txt')
                     raise
                 else:
-                    self.learnTrackOut.write("Explore_Iteration\tMacroPopSize\tMicroPopSize\tHamming_Loss\tAccuracy\tAveGenerality\tTime(min)\tTP\tTN\n")
+                    self.learnTrackOut.write("Explore_Iteration\tMacroPopSize\tMicroPopSize\tHamming_Loss\tAccuracy\tAveGenerality\tTime(min)\tTP\tTN\tOverGenAcc\n")
                 # Instantiate Population---------
                 self.population = ClassifierSet()
                 self.exploreIter = 0
@@ -2006,6 +2017,7 @@ def MLRBC(arg):
                 self.hloss = [1 for i in range(cons.trackingFrequency)]
                 self.tp = [0.0 for i in range(cons.trackingFrequency)]
                 self.tn = [0.0 for i in range(cons.trackingFrequency)]
+                self.overGenAcc = [0.0 for i in range(cons.trackingFrequency)]
 
             # Run the eLCS algorithm-------------------------------------------------------------------------------
             self.run_eLCS()
@@ -2044,8 +2056,9 @@ def MLRBC(arg):
                     trackedHloss = sum(self.hloss) / float(cons.trackingFrequency)
                     trackedTP = sum(self.tp) / float(cons.trackingFrequency)
                     trackedTN = sum(self.tn) / float(cons.trackingFrequency)
+                    trackedOverGenAcc = sum(self.overGenAcc) / float(cons.trackingFrequency)
                     self.learnTrackOut.write(self.population.getPopTrack(round(trackedHloss,3), trackedAccuracy, self.exploreIter + 1,
-                                                                         cons.trackingFrequency, trackedTP, trackedTN))  # Report learning progress to standard out and tracking file.
+                                                                         cons.trackingFrequency, trackedTP, trackedTN, trackedOverGenAcc))  # Report learning progress to standard out and tracking file.
                 cons.timer.stopTimeEvaluation()
 
                 # -------------------------------------------------------
@@ -2099,6 +2112,7 @@ def MLRBC(arg):
             # FORM A MATCH SET - includes covering
             # -----------------------------------------------------------------------------------------------------------------------------------------
             self.population.makeMatchSet(state_phenotype_conf, exploreIter)
+            self.overGenAcc[exploreIter % cons.trackingFrequency] = self.population.overGenAcc
             # -----------------------------------------------------------------------------------------------------------------------------------------
             # MAKE A PREDICTION - utilized here for tracking estimated learning progress.  Typically used in the explore phase of many LCS algorithms.
             # -----------------------------------------------------------------------------------------------------------------------------------------
@@ -2204,8 +2218,8 @@ def MLRBC(arg):
             save_path = RUN_RESULT_PATH
             fileName = cons.outFileName + '_Prediction_Compare'
             completeName = os.path.join(save_path, fileName)
-            predComp = open(completeName + '_' + str(exp) + '.txt', 'w')
-            predComp.write('True label \t Max prediction \t Combined prediction \n')
+            # predComp = open(completeName + '_' + str(exp) + '.txt', 'w')
+            # predComp.write('True label \t Max prediction \t Combined prediction \n')
 
             if isTrain:
                 """
