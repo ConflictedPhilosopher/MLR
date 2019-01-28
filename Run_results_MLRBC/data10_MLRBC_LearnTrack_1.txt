@@ -1,0 +1,2 @@
+Explore_Iteration	MacroPopSize	MicroPopSize	Hamming_Loss	Accuracy	AveGenerality	Time(min)	TP	TN	OverGenAcc
+3500	312	559	0.198	0.28514285714285714	0.11	0.20	4.878857142857143	3.1365714285714286	0.000

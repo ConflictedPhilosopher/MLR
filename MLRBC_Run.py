@@ -13,7 +13,7 @@ from sklearn.model_selection import train_test_split
 from DataManagement import DataManage
 import MLRBC
 from config import *
-# random.seed(SEED_NUMBER)
+
 
 class averageTrack():
 
@@ -259,7 +259,7 @@ class parallelRun():
                 dataManage = DataManage(completeTrainFileName, completeValidFileName)
                 argument.append(dataManage)
                 arg_instances.append(argument)
-            Parallel(n_jobs = NO_PARALLEL_JOBS, verbose=1, backend="threading")(map(delayed(MLRBC.MLRBC), arg_instances))
+            Parallel(n_jobs = NO_PARALLEL_JOBS, verbose=1, backend="multiprocessing")(map(delayed(MLRBC.MLRBC), arg_instances))
         else:
             if (NO_EXPERIMENTS_AVERAGING > 1):
                 completeTrainFileName = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + ".txt")
@@ -489,6 +489,7 @@ class parallelRun():
                 count += 1
         return count
 
+
 def convertCSV2TXT(infilename, outfilename):
     """
     :param infileName: input .csv file name
@@ -522,7 +523,6 @@ def convertCSV2TXT(infilename, outfilename):
         np.savetxt(outfilename, data, fmt = '%s', header = Header, delimiter = '\t', newline = '\n', comments='')
     except:
         pass
-
 
 
 if __name__== "__main__":

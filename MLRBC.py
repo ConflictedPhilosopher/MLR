@@ -29,7 +29,7 @@ def MLRBC(arg):
     labelMissingData = "NA"							# Label used for any missing data in the data set.
     discreteAttributeLimit = "NA"					# The maximum number of attribute states allowed before an attribute or phenotype is considered to be continuous (Set this value >= the number of states for any discrete attribute or phenotype in their dataset).
     discretePhenotypeLimit = "NA"
-    trackingFrequency = 1000						# Specifies the number of iterations before each estimated learning progress report by the algorithm ('0' = report progress every epoch, i.e. every pass through all instances in the training data).
+    trackingFrequency = 3500						# Specifies the number of iterations before each estimated learning progress report by the algorithm ('0' = report progress every epoch, i.e. every pass through all instances in the training data).
 
     ######----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Supervised Learning Parameters - Generally just use default values.
@@ -416,11 +416,11 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # GENERATE MATCHING CONDITION
             # -------------------------------------------------------
-            # while len(self.specifiedAttList) < 1:
-            for attRef in range(len(state)):
-                if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
-                    self.specifiedAttList.append(attRef)
-                    self.condition.append(self.buildMatch(attRef, state))
+            while len(self.specifiedAttList) < 1:
+                for attRef in range(len(state)):
+                    if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
+                        self.specifiedAttList.append(attRef)
+                        self.condition.append(self.buildMatch(attRef, state))
 
         def classifierCopy(self, clOld, exploreIter):
             """  Constructs an identical Classifier.  However, the experience of the copy is set to 0 and the numerosity
@@ -814,12 +814,15 @@ def MLRBC(arg):
         # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         def getDelProp(self, meanFitness):
             """  Returns the vote for deletion of the classifier. """
-            if self.fitness / self.numerosity >= cons.delta * meanFitness or self.matchCount < cons.theta_del:
+            if self.fitness >= cons.delta * meanFitness or self.matchCount < cons.theta_del:
+            # if self.fitness / self.numerosity >= cons.delta * meanFitness or self.matchCount < cons.theta_del:
+
                 self.deletionVote = self.aveMatchSetSize * self.numerosity
 
             elif self.fitness == 0.0:
                 self.deletionVote = self.aveMatchSetSize * self.numerosity * meanFitness / (cons.init_fit / self.numerosity)
             else:
+                # self.deletionVote = self.aveMatchSetSize * self.numerosity * meanFitness / (self.fitness)
                 self.deletionVote = self.aveMatchSetSize * self.numerosity * meanFitness / (self.fitness / self.numerosity)
             return self.deletionVote
 
@@ -868,6 +871,7 @@ def MLRBC(arg):
         def updateAccuracy(self):
             if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
                 self.accuracy = self.correctCount / float(self.matchCount)
+                # self.accuracy = 1 - (self.loss / float(self.matchCount))
             else:
                 if random.random() < 0.5:
                     self.accuracy = self.precision / float(self.matchCount)
@@ -875,7 +879,6 @@ def MLRBC(arg):
                     self.accuracy = self.recall / float(self.matchCount)
                     #self.accuracy = 1 - (self.loss / float(self.matchCount))
                     self.accuracy = 1 - (self.f1 / float(self.matchCount))
-
 
         def updateFitness(self):
             """ Update the fitness parameter. """
@@ -913,11 +916,16 @@ def MLRBC(arg):
 
         def updateLoss(self, TruePhenotype):  # Will not be necessary
             # Update the loss value of the classifier
+            a = np.array(list(TruePhenotype)).astype(int)
+            b = np.array(list(self.phenotype)).astype(int)
+            loss = sum([e for e in a ^ b])
+            """
             loss = 0
             for c in range(len(self.phenotype)):
                 if self.phenotype[c] != TruePhenotype[c]:
                     loss += 1
             loss = loss / len(self.phenotype)
+            """
             self.loss += loss
 
         def updateMLperformance(self, TruePhenotype, combVote):  # New
@@ -1083,7 +1091,7 @@ def MLRBC(arg):
         def makeMatchSet(self, state_phenotype, exploreIter):
             """ Constructs a match set from the population. Covering is initiated if the match set is empty or a rule with the current correct phenotype is absent. """
             state = state_phenotype[0]
-            phenotype = state_phenotype[1]
+            phenotype = int(state_phenotype[1], 2)
             doCovering = True  # Covering check: Twofold (1)checks that a match is present, and (2) that at least one match dictates the correct phenotype.
             setNumerositySum = 0  # new
             k = 2
@@ -1095,34 +1103,34 @@ def MLRBC(arg):
             # -------------------------------------------------------
             cons.timer.startTimeMatching()
 
-            if len(self.popSet)>DISTRIBUTED_MATCHING_TH:
+            if len(self.popSet) > DISTRIBUTED_MATCHING_TH:
                 argList = []
                 for i in range(len(self.popSet)):
                     arg = [self.popSet[i], i, state]
                     argList.append(arg)
-                match = Parallel(n_jobs=15, verbose=0, backend="threading")(map(delayed(self.singleMatchThread), argList))
+                match = Parallel(n_jobs=15, verbose=0, backend="multiprocessing")(map(delayed(self.singleMatchThread), argList))
                 self.matchSet = [x for x in match if x != None]
                 for i in self.matchSet:
                     setNumerositySum += self.popSet[i].numerosity
-                    if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:  # Discrete phenotype
-                        if self.popSet[i].phenotype == phenotype:  # Check for phenotype coverage
+                    if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
+                        prediction_int = int(self.popSet[i].phenotype, 2)
+                        if prediction_int == phenotype:  # Check for phenotype coverage
                             doCovering = False
                     else:  # Continuous phenotype
                         if float(self.popSet[i].phenotype[0]) <= float(phenotype) <= float(
                                 self.popSet[i].phenotype[1]):  # Check for phenotype coverage
                             doCovering = False
             else:
-                for i in range(len(self.popSet)):
+                popSize = len(self.popSet)
+                for i in range(popSize):
                     cl = self.popSet[i]  # One classifier at a time
                     # calculate the average accuracy and count of over-general classifiers
                     if cl.isOverGeneral():
                         overGenCount += 1
                         overGenAccSum += cl.accuracy
-
                     # theta_GA adaptation algorithm
                     if ADAPT_THETA_GA:
                         if cl.isOverGeneral():
-                            print("Found one!")
                             try:
                                 IR = cl.experience[self.majLP] / (cl.experience[self.majLP] + cl.experience[self.minLP])
                                 if IR < 2000 and cl.numerosity > self.aveNumerosity:
@@ -1131,23 +1139,21 @@ def MLRBC(arg):
                                 pass
                     else:
                         pass
-                    #---------------
-                    if cl.match(state):  # Check for match
-                        self.matchSet.append(i)  # If match - add classifier to match set
-                        setNumerositySum += cl.numerosity  # New Increment the set numerosity sum
-
+                    #-------------------------------------------------------------
+                    if cl.match(state):
+                        self.matchSet.append(i)
+                        setNumerositySum += cl.numerosity
                         # Covering Check--------------------------------------------------------
-                        if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:  # Discrete phenotype
-                            if cl.phenotype == phenotype:  # Check for phenotype coverage
+                        if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
+                            prediction_int = int(cl.phenotype, 2)
+                            if prediction_int == phenotype:  # Check for phenotype coverage
                                 doCovering = False
-                        else:  # Continuous phenotype
-                            if float(cl.phenotype[0]) <= float(phenotype) <= float(
-                                    cl.phenotype[1]):  # Check for phenotype coverage
+                        else:
+                            if float(cl.phenotype[0]) <= float(phenotype) <= float(cl.phenotype[1]):  # Check for phenotype coverage
                                 doCovering = False
                 try:
                     self.aveNumerosity = setNumerositySum / len(self.popSet)
                     self.overGenAcc = overGenAccSum / overGenCount
-                    # print("Over-general classifier count and average accuracy: ", overGenCount, overGenAcc)
                 except ZeroDivisionError:
                     self.aveNumerosity = 1
                     self.overGenAcc = 0
@@ -1158,28 +1164,31 @@ def MLRBC(arg):
             # COVERING
             # -------------------------------------------------------
             while doCovering:
-                newCl = Classifier(setNumerositySum + 1, exploreIter, state, phenotype)
+                newCl = Classifier(setNumerositySum + 1, exploreIter, state, state_phenotype[1])
                 self.addClassifierToPopulation(newCl, True)
                 self.matchSet.append(len(self.popSet) - 1)  # Add covered classifier to matchset
                 doCovering = False
 
-
         def makeCorrectSet(self, phenotype):
-            for i in range(len(self.matchSet)):
-                ref = self.matchSet[i]
+            phenotype_int = int(phenotype, 2)
+            if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
                 # -------------------------------------------------------
-                # DISCRETE PHENOTYPE
+                # DISCRETE AND MULTI-LABEL PHENOTYPE
                 # -------------------------------------------------------
-                if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
-                    if self.popSet[ref].phenotype == phenotype:
+                for i in range(len(self.matchSet)):
+                    ref = self.matchSet[i]
+                    prediction_int = int(self.popSet[ref].phenotype, 2)
+                    if prediction_int == phenotype_int:
                         self.correctSet.append(ref)
-                #elif cons.env.formatData.MLphenotype:
-                    #if self.isPhenotypeSubset(ref, phenotype):
-                        #self.correctSet.append(ref)
-                # -------------------------------------------------------
-                # CONTINUOUS PHENOTYPE
-                # -------------------------------------------------------
-                else:
+                    #elif cons.env.formatData.MLphenotype:
+                        #if self.isPhenotypeSubset(ref, phenotype):
+                            #self.correctSet.append(ref)
+                    # -------------------------------------------------------
+                    # CONTINUOUS PHENOTYPE
+                    # -------------------------------------------------------
+            else:
+                for i in range(len(self.matchSet)):
+                    ref = self.matchSet[i]
                     if float(phenotype) <= float(self.popSet[ref].phenotype[1]) and float(phenotype) >= float(self.popSet[ref].phenotype[0]):
                         self.correctSet.append(ref)
 
@@ -1194,7 +1203,8 @@ def MLRBC(arg):
 
         def makeEvalMatchSet(self, state):
             """ Constructs a match set for evaluation purposes which does not activate either covering or deletion. """
-            for i in range(len(self.popSet)):  # Go through the population
+            popSize = len(self.popSet)
+            for i in range(popSize):  # Go through the population
                 cl = self.popSet[i]  # A single classifier
                 if cl.match(state):  # Check for match
                     self.matchSet.append(i)  # Add classifier to match set
@@ -1498,7 +1508,6 @@ def MLRBC(arg):
             for ref in self.matchSet:
                 self.popSet[ref].updateExperience(state_phenotype_conf[1])
                 self.popSet[ref].updateMatchSetSize(matchSetNumerosity)
-                # self.popSet[ref].updateLoss(state_phenotype_conf[1])  # will not be necessary
                 if ref in self.correctSet:
                     self.popSet[ref].updateCorrect()
                 self.popSet[ref].updateMLperformance(state_phenotype_conf[1], None)  # New
@@ -1596,11 +1605,13 @@ def MLRBC(arg):
             """ Returns a formated output string to be printed to the Learn Track output file. """
             trackString = str(exploreIter) + "\t" + str(len(self.popSet)) + "\t" + str(self.microPopSize) + "\t" + str(Hloss) + "\t" + str(accuracy) + "\t" + str("%.2f" % self.aveGenerality) + "\t" + str(
                 "%.2f" % cons.timer.returnGlobalTimer() + "\t" + str(TP) + "\t" + str(TN) + "\t" + str("%.3f" % OverGenAcc))  + "\n"
-            """
+
             if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:  # discrete phenotype
                 print(("Epoch: " + str(int(exploreIter / trackingFrequency)) + "\t Iteration: " + str(
                     exploreIter) + "\t MacroPop: " + str(len(self.popSet)) + "\t MicroPop: " + str(
                     self.microPopSize) + "\t AveGen: " + str("%.2f" % self.aveGenerality) + "\t Time: " + str("%.2f" % cons.timer.returnGlobalTimer())))
+
+            """        
             else:  # continuous phenotype
                 print(("Epoch: " + str(int(exploreIter / trackingFrequency)) + "\t Iteration: " + str(
                     exploreIter) + "\t MacroPop: " + str(len(self.popSet)) + "\t MicroPop: " + str(
@@ -2013,11 +2024,16 @@ def MLRBC(arg):
                 # Instantiate Population---------
                 self.population = ClassifierSet()
                 self.exploreIter = 0
-                self.correct = [0.0 for i in range(cons.trackingFrequency)]
-                self.hloss = [1 for i in range(cons.trackingFrequency)]
-                self.tp = [0.0 for i in range(cons.trackingFrequency)]
-                self.tn = [0.0 for i in range(cons.trackingFrequency)]
-                self.overGenAcc = [0.0 for i in range(cons.trackingFrequency)]
+                # self.correct = [0.0 for i in range(cons.trackingFrequency)]
+                self.correct = []
+                # self.hloss = [1 for i in range(cons.trackingFrequency)]
+                self.hloss = []
+                # self.tp = [0.0 for i in range(cons.trackingFrequency)]
+                self.tp = []
+                # self.tn = [0.0 for i in range(cons.trackingFrequency)]
+                self.tn = []
+                # self.overGenAcc = [0.0 for i in range(cons.trackingFrequency)]
+                self.overGenAcc = []
 
             # Run the eLCS algorithm-------------------------------------------------------------------------------
             self.run_eLCS()
@@ -2027,9 +2043,7 @@ def MLRBC(arg):
             # --------------------------------------------------------------
             print("Learning Checkpoints: " + str(cons.learningCheckpoints))
             print("Maximum Iterations: " + str(cons.maxLearningIterations))
-            print("Beginning MLRBC learning iterations.")
-            print(
-                "------------------------------------------------------------------------------------------------------------------------------------------------------")
+            print("-----------------------------------------------------------------------------------------------------")
 
             # -------------------------------------------------------
             # MAJOR LEARNING LOOP
@@ -2112,7 +2126,8 @@ def MLRBC(arg):
             # FORM A MATCH SET - includes covering
             # -----------------------------------------------------------------------------------------------------------------------------------------
             self.population.makeMatchSet(state_phenotype_conf, exploreIter)
-            self.overGenAcc[exploreIter % cons.trackingFrequency] = self.population.overGenAcc
+            # self.overGenAcc[exploreIter % cons.trackingFrequency] = self.population.overGenAcc
+            self.overGenAcc.append(self.population.overGenAcc)
             # -----------------------------------------------------------------------------------------------------------------------------------------
             # MAKE A PREDICTION - utilized here for tracking estimated learning progress.  Typically used in the explore phase of many LCS algorithms.
             # -----------------------------------------------------------------------------------------------------------------------------------------
@@ -2142,14 +2157,22 @@ def MLRBC(arg):
                     for it in range(cons.env.formatData.ClassCount):
                         tp += int(target[it]) and int(phenotypePrediction[it])
                         tn += not (int(target[it]) or int(phenotypePrediction[it]))
-                    self.tp[exploreIter % cons.trackingFrequency] = tp
-                    self.tn[exploreIter % cons.trackingFrequency] = tn
-                    if phenotypePrediction == state_phenotype_conf[1]:
-                        self.correct[exploreIter % cons.trackingFrequency] = 1
-                        self.hloss[exploreIter % cons.trackingFrequency] = 0
+                    # self.tp[exploreIter % cons.trackingFrequency] = tp
+                    self.tp.append(tp)
+                    # self.tn[exploreIter % cons.trackingFrequency] = tn
+                    self.tn.append(tn)
+                    target_int = int(state_phenotype_conf[1], 2)
+                    phenotypePrediction_int = int(phenotypePrediction, 2)
+                    if phenotypePrediction_int == target_int:
+                        # self.correct[exploreIter % cons.trackingFrequency] = 1
+                        self.correct.append(1)
+                        # self.hloss[exploreIter % cons.trackingFrequency] = 0
+                        self.hloss.append(0)
                     else:
-                        self.correct[exploreIter % cons.trackingFrequency] = 0
-                        self.hloss[exploreIter % cons.trackingFrequency] = Acc.hammingLoss(phenotypePrediction, state_phenotype_conf[1])
+                        # self.correct[exploreIter % cons.trackingFrequency] = 0
+                        self.correct.append(0)
+                        # self.hloss[exploreIter % cons.trackingFrequency] = Acc.hammingLoss(phenotypePrediction, state_phenotype_conf[1])
+                        self.hloss.append(Acc.hammingLoss(phenotypePrediction, state_phenotype_conf[1]))
                 # -------------------------------------------------------
                 # CONTINUOUS PHENOTYPE PREDICTION
                 # -------------------------------------------------------
