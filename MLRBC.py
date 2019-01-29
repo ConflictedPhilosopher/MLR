@@ -416,11 +416,12 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # GENERATE MATCHING CONDITION
             # -------------------------------------------------------
-            while len(self.specifiedAttList) < 1:
-                for attRef in range(len(state)):
-                    if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
-                        self.specifiedAttList.append(attRef)
-                        self.condition.append(self.buildMatch(attRef, state))
+            # while len(self.specifiedAttList) < 1:
+
+            for attRef in range(len(state)):
+                if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
+                    self.specifiedAttList.append(attRef)
+                    self.condition.append(self.buildMatch(attRef, state))
 
         def classifierCopy(self, clOld, exploreIter):
             """  Constructs an identical Classifier.  However, the experience of the copy is set to 0 and the numerosity
@@ -1605,13 +1606,13 @@ def MLRBC(arg):
             """ Returns a formated output string to be printed to the Learn Track output file. """
             trackString = str(exploreIter) + "\t" + str(len(self.popSet)) + "\t" + str(self.microPopSize) + "\t" + str(Hloss) + "\t" + str(accuracy) + "\t" + str("%.2f" % self.aveGenerality) + "\t" + str(
                 "%.2f" % cons.timer.returnGlobalTimer() + "\t" + str(TP) + "\t" + str(TN) + "\t" + str("%.3f" % OverGenAcc))  + "\n"
-
+            """
             if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:  # discrete phenotype
                 print(("Epoch: " + str(int(exploreIter / trackingFrequency)) + "\t Iteration: " + str(
                     exploreIter) + "\t MacroPop: " + str(len(self.popSet)) + "\t MicroPop: " + str(
                     self.microPopSize) + "\t AveGen: " + str("%.2f" % self.aveGenerality) + "\t Time: " + str("%.2f" % cons.timer.returnGlobalTimer())))
 
-            """        
+       
             else:  # continuous phenotype
                 print(("Epoch: " + str(int(exploreIter / trackingFrequency)) + "\t Iteration: " + str(
                     exploreIter) + "\t MacroPop: " + str(len(self.popSet)) + "\t MicroPop: " + str(
@@ -1625,6 +1626,9 @@ def MLRBC(arg):
     class Prediction:
         def __init__(self, population):
             self.decision = None
+            self.population = population
+            self.theta = 0.7
+        def calMaxPrediction(self):
             # -------------------------------------------------------
             # DISCRETE PHENOTYPES (CLASSES)
             # -------------------------------------------------------
@@ -1760,7 +1764,7 @@ def MLRBC(arg):
                 pred = []
                 loc = 0
                 for val in self.combVote:
-                    if val >= 0.7:
+                    if val >= self.theta:
                         pred.append('1')
                     else:
                         pred.append('0')
@@ -2024,16 +2028,11 @@ def MLRBC(arg):
                 # Instantiate Population---------
                 self.population = ClassifierSet()
                 self.exploreIter = 0
-                # self.correct = [0.0 for i in range(cons.trackingFrequency)]
-                self.correct = []
-                # self.hloss = [1 for i in range(cons.trackingFrequency)]
-                self.hloss = []
-                # self.tp = [0.0 for i in range(cons.trackingFrequency)]
-                self.tp = []
-                # self.tn = [0.0 for i in range(cons.trackingFrequency)]
-                self.tn = []
-                # self.overGenAcc = [0.0 for i in range(cons.trackingFrequency)]
-                self.overGenAcc = []
+                self.correct = [0.0 for i in range(cons.trackingFrequency)]
+                self.hloss = [1 for i in range(cons.trackingFrequency)]
+                self.tp = [0.0 for i in range(cons.trackingFrequency)]
+                self.tn = [0.0 for i in range(cons.trackingFrequency)]
+                self.overGenAcc = [0.0 for i in range(cons.trackingFrequency)]
 
             # Run the eLCS algorithm-------------------------------------------------------------------------------
             self.run_eLCS()
@@ -2126,18 +2125,25 @@ def MLRBC(arg):
             # FORM A MATCH SET - includes covering
             # -----------------------------------------------------------------------------------------------------------------------------------------
             self.population.makeMatchSet(state_phenotype_conf, exploreIter)
-            # self.overGenAcc[exploreIter % cons.trackingFrequency] = self.population.overGenAcc
-            self.overGenAcc.append(self.population.overGenAcc)
             # -----------------------------------------------------------------------------------------------------------------------------------------
             # MAKE A PREDICTION - utilized here for tracking estimated learning progress.  Typically used in the explore phase of many LCS algorithms.
             # -----------------------------------------------------------------------------------------------------------------------------------------
             Acc = ClassAccuracy()
             cons.timer.startTimeEvaluation()
             prediction = Prediction(self.population)
-            phenotypePrediction = prediction.getDecision()
+
+            if PREDICTION_METHOD == 'max':
+                prediction.calMaxPrediction()
+                phenotypePrediction = prediction.getDecision()
+            else:
+                prediction.combinePredictions(self.population)
+                phenotypePrediction = prediction.getCombPred()
+
+            itt = exploreIter % cons.trackingFrequency
             # -------------------------------------------------------
             # PREDICTION NOT POSSIBLE
             # -------------------------------------------------------
+            self.overGenAcc[itt] = self.population.overGenAcc
             if phenotypePrediction == None or phenotypePrediction == 'Tie':
                 if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
                     phenotypePrediction = random.choice(cons.env.formatData.phenotypeList)
@@ -2157,22 +2163,16 @@ def MLRBC(arg):
                     for it in range(cons.env.formatData.ClassCount):
                         tp += int(target[it]) and int(phenotypePrediction[it])
                         tn += not (int(target[it]) or int(phenotypePrediction[it]))
-                    # self.tp[exploreIter % cons.trackingFrequency] = tp
-                    self.tp.append(tp)
-                    # self.tn[exploreIter % cons.trackingFrequency] = tn
-                    self.tn.append(tn)
+                    self.tp[itt] = tp
+                    self.tn[itt] = tn
                     target_int = int(state_phenotype_conf[1], 2)
                     phenotypePrediction_int = int(phenotypePrediction, 2)
                     if phenotypePrediction_int == target_int:
-                        # self.correct[exploreIter % cons.trackingFrequency] = 1
-                        self.correct.append(1)
-                        # self.hloss[exploreIter % cons.trackingFrequency] = 0
-                        self.hloss.append(0)
+                        self.correct[itt] = 1
+                        self.hloss[itt] = 0
                     else:
-                        # self.correct[exploreIter % cons.trackingFrequency] = 0
-                        self.correct.append(0)
-                        # self.hloss[exploreIter % cons.trackingFrequency] = Acc.hammingLoss(phenotypePrediction, state_phenotype_conf[1])
-                        self.hloss.append(Acc.hammingLoss(phenotypePrediction, state_phenotype_conf[1]))
+                        self.correct[itt] = 0
+                        self.hloss[itt] = Acc.hammingLoss(phenotypePrediction, state_phenotype_conf[1])
                 # -------------------------------------------------------
                 # CONTINUOUS PHENOTYPE PREDICTION
                 # -------------------------------------------------------
@@ -2180,7 +2180,7 @@ def MLRBC(arg):
                     predictionError = math.fabs(phenotypePrediction - float(state_phenotype_conf[1]))
                     phenotypeRange = cons.env.formatData.phenotypeList[1] - cons.env.formatData.phenotypeList[0]
                     accuracyEstimate = 1.0 - (predictionError / float(phenotypeRange))
-                    self.correct[exploreIter % cons.trackingFrequency] = accuracyEstimate
+                    self.correct[itt] = accuracyEstimate
 
             cons.timer.stopTimeEvaluation()
             # -----------------------------------------------------------------------------------------------------------------------------------------
@@ -2254,6 +2254,7 @@ def MLRBC(arg):
 
                     prediction = Prediction(self.population)
                     if PREDICTION_METHOD == 'max':
+                        prediction.calMaxPrediction()
                         combPred = prediction.getDecision()
                         combVote = [0] * cons.env.formatData.ClassCount
                     else:
@@ -2297,6 +2298,7 @@ def MLRBC(arg):
 
                     prediction = Prediction(self.population)
                     if PREDICTION_METHOD == 'max':
+                        prediction.calMaxPrediction()
                         combPred = prediction.getDecision()
                         combVote = [0] * cons.env.formatData.ClassCount
                     else:
