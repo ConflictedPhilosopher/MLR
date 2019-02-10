@@ -5,20 +5,20 @@ DO_AVERAGING = True
 NO_PARALLEL_JOBS = 10
 
 
-DATA_HEADER = "data1"
+DATA_HEADER = "data8"
 NO_ATTRIBUTES = 2
 VALID_DATA_HEADER = DATA_HEADER + "-test"
 TRAIN_DATA_HEADER = DATA_HEADER + "-train"
 DATA_FOLDER = "C:\Datasets\synthetic"
 RUN_RESULT_PATH = "Run_results_MLRBC"
 
-NO_TRAIN_ITERATION = 200000
+NO_TRAIN_ITERATION = 400000
 POP_SIZE = 500
 DISTRIBUTED_MATCHING_TH = 6000
 REF_CARDINALITY = None            # set to 'None' for no density adaptation
 DOWN_SAMPLE_RATIO = 1
 PREDICTION_METHOD = 'max'
 ADAPT_THETA_GA = False
-PLOT_SETTING = [0, 1, 1, 0, 1]   # population sizes, accuracy, Hloss, generality, TP & TN
+PLOT_SETTING = [0, 1, 1, 0, 0]   # population sizes, accuracy, Hloss, generality, TP & TN
 
 

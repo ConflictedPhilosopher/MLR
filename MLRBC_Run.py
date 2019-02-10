@@ -185,8 +185,8 @@ class averageTrack():
 
         for i in range(len(self.IterNum)):
             trackString = str(self.IterNum[i]) + "\t" + str(self.macroPopSize_ave[i]) + "\t" + str(self.microPopSize_ave[i]) \
-                          + "\t" + str("%.2f" % self.hlossEstimate_ave[i]) + "\t" + str("%.2f" % self.accuracyEstimate_ave[i]) + "\t" \
-                          + str("%.2f" % self.aveGenerality_ave[i]) + "\t" + str("%.2f" % self.tp_ave[i]) + "\t" + str("%.2f" % self.tn_ave[i]) + "\t" + str("%.3f" % self.overGenAccuracy_ave[i]) + "\n"
+                          + "\t" + str("%.4f" % self.hlossEstimate_ave[i]) + "\t" + str("%.4f" % self.accuracyEstimate_ave[i]) + "\t" \
+                          + str("%.4f" % self.aveGenerality_ave[i]) + "\t" + str("%.4f" % self.tp_ave[i]) + "\t" + str("%.4f" % self.tn_ave[i]) + "\t" + str("%.4f" % self.overGenAccuracy_ave[i]) + "\n"
             learnTrackOut.write(trackString)
 
         learnTrackOut.close()
@@ -433,7 +433,7 @@ class parallelRun():
                     #     outData = outData.reset_index(drop = True)
                     # ClassDict.pop(dropLP, None)
                     for i in range(10):
-                        random_row = random.randint(0, len(outData))
+                        random_row = random.randint(0, len(outData)-1)
                         if outData.loc[random_row]["Class"] in downsample_LPs:
                              outData.drop([random_row], inplace = True, axis = 0)
                         outData = outData.reset_index(drop = True)

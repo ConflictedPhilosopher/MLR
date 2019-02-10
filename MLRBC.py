@@ -871,8 +871,8 @@ def MLRBC(arg):
         # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         def updateAccuracy(self):
             if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
-                self.accuracy = self.correctCount / float(self.matchCount)
-                # self.accuracy = 1 - (self.loss / float(self.matchCount))
+                # self.accuracy = self.correctCount / float(self.matchCount)
+                self.accuracy = 1 - (self.loss / float(self.matchCount))
             else:
                 if random.random() < 0.5:
                     self.accuracy = self.precision / float(self.matchCount)
@@ -1605,7 +1605,7 @@ def MLRBC(arg):
         def getPopTrack(self, Hloss, accuracy, exploreIter, trackingFrequency, TP, TN, OverGenAcc):
             """ Returns a formated output string to be printed to the Learn Track output file. """
             trackString = str(exploreIter) + "\t" + str(len(self.popSet)) + "\t" + str(self.microPopSize) + "\t" + str(Hloss) + "\t" + str(accuracy) + "\t" + str("%.2f" % self.aveGenerality) + "\t" + str(
-                "%.2f" % cons.timer.returnGlobalTimer() + "\t" + str(TP) + "\t" + str(TN) + "\t" + str("%.3f" % OverGenAcc))  + "\n"
+                "%.2f" % cons.timer.returnGlobalTimer() + "\t" + str("%.3f" % TP) + "\t" + str("%.3f" % TN) + "\t" + str("%.3f" % OverGenAcc))  + "\n"
             """
             if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:  # discrete phenotype
                 print(("Epoch: " + str(int(exploreIter / trackingFrequency)) + "\t Iteration: " + str(
@@ -1644,12 +1644,12 @@ def MLRBC(arg):
                 #phenotypeList = copy.deepcopy(cons.env.formatData.phenotypeList)
                 phenotypeList = []
 
-                for ref in population.matchSet:
-                    cl = population.popSet[ref]
-                    if any(cl.phenotype in s for s in population.labelPowerSetList):
+                for ref in self.population.matchSet:
+                    cl = self.population.popSet[ref]
+                    if any(cl.phenotype in s for s in self.population.labelPowerSetList):
                         pass
                     else:
-                        population.labelPowerSetList.append(cl.phenotype)
+                        self.population.labelPowerSetList.append(cl.phenotype)
 
                     if any(cl.phenotype in s for s in phenotypeList):
                         self.vote[cl.phenotype] += cl.fitness * cl.numerosity
@@ -2070,7 +2070,7 @@ def MLRBC(arg):
                     trackedTP = sum(self.tp) / float(cons.trackingFrequency)
                     trackedTN = sum(self.tn) / float(cons.trackingFrequency)
                     trackedOverGenAcc = sum(self.overGenAcc) / float(cons.trackingFrequency)
-                    self.learnTrackOut.write(self.population.getPopTrack(round(trackedHloss,3), trackedAccuracy, self.exploreIter + 1,
+                    self.learnTrackOut.write(self.population.getPopTrack(round(trackedHloss,4), round(trackedAccuracy, 4), self.exploreIter + 1,
                                                                          cons.trackingFrequency, trackedTP, trackedTN, trackedOverGenAcc))  # Report learning progress to standard out and tracking file.
                 cons.timer.stopTimeEvaluation()
 
