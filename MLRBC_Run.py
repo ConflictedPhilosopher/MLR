@@ -325,29 +325,29 @@ class parallelRun():
             df = pd.read_csv(infilename)
             Class = []  # list of all targets
             labelList = []
-            classCount = {}
+            classDict = {}
             for idx, row in df.iterrows():
                 label = [int(l) for l in row[NO_ATTRIBUTES:]]
                 newlabel = "".join(map(str, label))
                 Class.append(newlabel)
                 if newlabel in labelList:
-                    classCount[newlabel] += 1
+                    classDict[newlabel] += 1
                 else:
                     labelList.append(newlabel)
-                    classCount[newlabel] = 1
+                    classDict[newlabel] = 1
 
-            self.classCount = classCount
-            print("dataProp: " + str(len(classCount)) + " unique LPs detected.")
+            print("dataProp: " + str(len(classDict)) + " unique LPs detected.")
 
             self.majLP = ""
             self.minLP = ""
-            for key, value in classCount.items():
-                if value == max(classCount.values()):
+            for key, value in classDict.items():
+                if value == max(classDict.values()):
                     self.majLP = key
-                if value == min(classCount.values()):
+                if value == min(classDict.values()):
                     self.minLP = key
             # print("dataProp: " + "Majority LP: " + self.majLP + " and Minority LP: " + self.minLP)
-            lpIR = max(classCount.values()) / min(classCount.values())
+            lpIR = max(classDict.values()) / min(classDict.values())
+            self.classCount = classDict
 
             classCount = len(Class[0])
             dataCount = len(Class)

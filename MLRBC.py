@@ -416,12 +416,11 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # GENERATE MATCHING CONDITION
             # -------------------------------------------------------
-            # while len(self.specifiedAttList) < 1:
-
-            for attRef in range(len(state)):
-                if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
-                    self.specifiedAttList.append(attRef)
-                    self.condition.append(self.buildMatch(attRef, state))
+            while len(self.specifiedAttList) < 1:
+                for attRef in range(len(state)):
+                    if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
+                        self.specifiedAttList.append(attRef)
+                        self.condition.append(self.buildMatch(attRef, state))
 
         def classifierCopy(self, clOld, exploreIter):
             """  Constructs an identical Classifier.  However, the experience of the copy is set to 0 and the numerosity
@@ -1837,7 +1836,7 @@ def MLRBC(arg):
         def ExHammingLoss(self, phenotypePrediction, true_phenotype, phenotype_conf, true_conf):
             """
             Calculates the extended Hamming loss value for the given prediction according to 'Nazmi, Razegh-Jahromi,
-            Homaifar, Multi-label classification  with weighted labels using learning classifiers, IEEE SMC-2017.'
+            Homaifar, Multi-label classification  with weighted labels using learning classifiers, ICMLA-2017.'
             """
             it = 0
             Dist = 0.0
