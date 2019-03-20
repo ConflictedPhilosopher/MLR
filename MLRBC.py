@@ -379,7 +379,7 @@ def MLRBC(arg):
             self.f1 = 0
             self.acc = 0
 
-            if isinstance(c, list):  # note subtle new change
+            if isinstance(c, list):
                 self.classifierCovering(a, b, c, d)
             elif isinstance(a, Classifier):
                 self.classifierCopy(a, b)
@@ -416,11 +416,11 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # GENERATE MATCHING CONDITION
             # -------------------------------------------------------
-            while len(self.specifiedAttList) < 1:
-                for attRef in range(len(state)):
-                    if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
-                        self.specifiedAttList.append(attRef)
-                        self.condition.append(self.buildMatch(attRef, state))
+            # while len(self.specifiedAttList) < 1:
+            for attRef in range(len(state)):
+                if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
+                    self.specifiedAttList.append(attRef)
+                    self.condition.append(self.buildMatch(attRef, state))
 
         def classifierCopy(self, clOld, exploreIter):
             """  Constructs an identical Classifier.  However, the experience of the copy is set to 0 and the numerosity
@@ -871,14 +871,13 @@ def MLRBC(arg):
         def updateAccuracy(self):
             if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
                 # self.accuracy = self.correctCount / float(self.matchCount)
-                self.accuracy = 1 - (self.loss / float(self.matchCount))
+                self.accuracy = self.f1 / float(self.matchCount)
+
             else:
                 if random.random() < 0.5:
                     self.accuracy = self.precision / float(self.matchCount)
                 else:
                     self.accuracy = self.recall / float(self.matchCount)
-                    #self.accuracy = 1 - (self.loss / float(self.matchCount))
-                    self.accuracy = 1 - (self.f1 / float(self.matchCount))
 
         def updateFitness(self):
             """ Update the fitness parameter. """
@@ -1125,9 +1124,9 @@ def MLRBC(arg):
                 for i in range(popSize):
                     cl = self.popSet[i]  # One classifier at a time
                     # calculate the average accuracy and count of over-general classifiers
-                    if cl.isOverGeneral():
-                        overGenCount += 1
-                        overGenAccSum += cl.accuracy
+                    # if cl.isOverGeneral():
+                    #     overGenCount += 1
+                    #     overGenAccSum += cl.accuracy
                     # theta_GA adaptation algorithm
                     if ADAPT_THETA_GA:
                         if cl.isOverGeneral():
@@ -1153,10 +1152,10 @@ def MLRBC(arg):
                                 doCovering = False
                 try:
                     self.aveNumerosity = setNumerositySum / len(self.popSet)
-                    self.overGenAcc = overGenAccSum / overGenCount
+                    # self.overGenAcc = overGenAccSum / overGenCount
                 except ZeroDivisionError:
                     self.aveNumerosity = 1
-                    self.overGenAcc = 0
+                    # self.overGenAcc = 0
             cons.timer.stopTimeMatching()  # new
 
 
@@ -1627,6 +1626,7 @@ def MLRBC(arg):
             self.decision = None
             self.population = population
             self.theta = 0.7
+
         def calMaxPrediction(self):
             # -------------------------------------------------------
             # DISCRETE PHENOTYPES (CLASSES)
@@ -2068,7 +2068,8 @@ def MLRBC(arg):
                     trackedHloss = sum(self.hloss) / float(cons.trackingFrequency)
                     trackedTP = sum(self.tp) / float(cons.trackingFrequency)
                     trackedTN = sum(self.tn) / float(cons.trackingFrequency)
-                    trackedOverGenAcc = sum(self.overGenAcc) / float(cons.trackingFrequency)
+                    # trackedOverGenAcc = sum(self.overGenAcc) / float(cons.trackingFrequency)
+                    trackedOverGenAcc = 0.0
                     self.learnTrackOut.write(self.population.getPopTrack(round(trackedHloss,4), round(trackedAccuracy, 4), self.exploreIter + 1,
                                                                          cons.trackingFrequency, trackedTP, trackedTN, trackedOverGenAcc))  # Report learning progress to standard out and tracking file.
                 cons.timer.stopTimeEvaluation()
@@ -2142,7 +2143,7 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # PREDICTION NOT POSSIBLE
             # -------------------------------------------------------
-            self.overGenAcc[itt] = self.population.overGenAcc
+            # self.overGenAcc[itt] = self.population.overGenAcc
             if phenotypePrediction == None or phenotypePrediction == 'Tie':
                 if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
                     phenotypePrediction = random.choice(cons.env.formatData.phenotypeList)
@@ -2200,7 +2201,8 @@ def MLRBC(arg):
             # -----------------------------------------------------------------------------------------------------------------------------------------
             # RUN THE GENETIC ALGORITHM - Discover new offspring rules from a selected pair of parents
             # -----------------------------------------------------------------------------------------------------------------------------------------
-            self.population.runGA(exploreIter, state_phenotype_conf[0], state_phenotype_conf[1])
+            if len(self.population.correctSet)>=1:
+                self.population.runGA(exploreIter, state_phenotype_conf[0], state_phenotype_conf[1])
             # -----------------------------------------------------------------------------------------------------------------------------------------
             # SELECT RULES FOR DELETION - This is done whenever there are more rules in the population than 'N', the maximum population size.
             # -----------------------------------------------------------------------------------------------------------------------------------------
