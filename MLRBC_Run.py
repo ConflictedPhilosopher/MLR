@@ -290,6 +290,8 @@ class parallelRun():
                     argument.append(dataManage)
                     argument.append(self.majLP)
                     argument.append(self.minLP)
+                    argument.append(self.Card)
+                    argument.append(self.pi)
                     arg_instances.append(argument)
                 Parallel(n_jobs = NO_PARALLEL_JOBS, verbose = 1, backend = "multiprocessing")(map(delayed(MLRBC.MLRBC), arg_instances))
             else:
@@ -315,7 +317,7 @@ class parallelRun():
                         convertCSV2TXT(os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + "-csv.csv"), completeTrainFileName)
                         convertCSV2TXT(os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + "-csv.csv"), completeValidFileName)
                 dataManage = DataManage(completeTrainFileName, completeValidFileName, self.classCount, self.dataInfo)
-                MLRBC.MLRBC([1, dataManage, self.majLP, self.minLP])
+                MLRBC.MLRBC([1, dataManage, self.majLP, self.minLP, self.Card, self.pi])
 
     def dataProp(self, infilename):
         """
@@ -362,10 +364,11 @@ class parallelRun():
             for rowIdx, row in data.iterrows():
                 label = row["Class"]
                 count += self.countLabel(label)
-            card = count / dataCount
-            dens = card / classCount
+            self.Card = count / dataCount
+            dens = self.Card / classCount
 
             Y = np.empty([classCount])
+            self.pi = np.empty([classCount])
             for y in range(classCount):
                 sampleCount = 0
                 for rowIdx, row in data.iterrows():
@@ -373,6 +376,7 @@ class parallelRun():
                     if label[y] == '1':
                         sampleCount += 1
                 Y[y] = sampleCount
+            self.pi = Y / dataCount
 
             IRLbl = np.empty([classCount])
             maxIR = Y.max()
@@ -384,7 +388,7 @@ class parallelRun():
             IRLbls = sqrt(temp.sum() / (classCount - 1))
             CVIR = IRLbls / meanIR
 
-            self.dataInfo = dict(zip(["card", "dens", "LP-IR", "MaxIR", "MeanIR", "IRLbls", "CVIR"], [card, dens, lpIR, maxIR, meanIR, IRLbls, CVIR]))
+            self.dataInfo = dict(zip(["card", "dens", "LP-IR", "MeanIR", "IRLbls", "CVIR"], [self.Card, dens, lpIR, meanIR, IRLbls, CVIR]))
             print("dataProp: " + str(self.dataInfo))
         except FileNotFoundError:
             print("completeData.csv not found.")

@@ -870,8 +870,8 @@ def MLRBC(arg):
         # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         def updateAccuracy(self):
             if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
-                # self.accuracy = self.correctCount / float(self.matchCount)
-                self.accuracy = self.f1 / float(self.matchCount)
+                self.accuracy = self.correctCount / float(self.matchCount)
+                # self.accuracy = self.f1 / float(self.matchCount)
 
             else:
                 if random.random() < 0.5:
@@ -1600,8 +1600,11 @@ def MLRBC(arg):
                         self.attributeSpecList[ref] += cl.numerosity
                         self.attributeAccList[ref] += cl.numerosity * cl.accuracy
 
-        def getPopTrack(self, Hloss, accuracy, exploreIter, trackingFrequency, TP, TN, OverGenAcc):
+        def getPopTrack(self, Hloss, accuracy, exploreIter):
             """ Returns a formated output string to be printed to the Learn Track output file. """
+            OverGenAcc = 0.0
+            TN = 0.0
+            TP = 0.0
             trackString = str(exploreIter) + "\t" + str(len(self.popSet)) + "\t" + str(self.microPopSize) + "\t" + str(Hloss) + "\t" + str(accuracy) + "\t" + str("%.2f" % self.aveGenerality) + "\t" + str(
                 "%.2f" % cons.timer.returnGlobalTimer() + "\t" + str("%.3f" % TP) + "\t" + str("%.3f" % TN) + "\t" + str("%.3f" % OverGenAcc))  + "\n"
             """
@@ -1760,7 +1763,12 @@ def MLRBC(arg):
                 if maxVote > 0.0:
                     for i in range(len(self.combVote)):
                         self.combVote[i] /= maxVote
-                pred = []
+            self.classCount = len(self.combVote)
+
+
+        def oneThreshold(self):
+            pred = []
+            if THRESHOLD == 'onethreshold':
                 loc = 0
                 for val in self.combVote:
                     if val >= self.theta:
@@ -1769,6 +1777,23 @@ def MLRBC(arg):
                         pred.append('0')
                     loc += 1
                 self.combPred = "".join(pred)
+
+        def rcut(self):
+            card = arg[4]
+            pred = []
+
+            labelRanks = [i[0] for i in sorted(enumerate(self.combVote), key=lambda x: x[1])]
+            labelsetSelected = [l for l in labelRanks[self.classCount - round(card):]]
+            for i in range(self.classCount):
+                if i in labelsetSelected:
+                    pred.append('1')
+                else:
+                    pred.append('0')
+            self.combPred = "".join(pred)
+
+        def pcut(self):
+            pi = arg[5]
+
 
         def getCombPred(self):
             return self.combPred
@@ -2023,15 +2048,15 @@ def MLRBC(arg):
                     print('cannot open', cons.outFileName + '_LearnTrack.txt')
                     raise
                 else:
-                    self.learnTrackOut.write("Explore_Iteration\tMacroPopSize\tMicroPopSize\tHamming_Loss\tAccuracy\tAveGenerality\tTime(min)\tTP\tTN\tOverGenAcc\n")
+                    self.learnTrackOut.write("Explore_Iteration\tMacroPopSize\tMicroPopSize\tHamming_Loss\tAccuracy\tAveGenerality\tTime(min)\n")
                 # Instantiate Population---------
                 self.population = ClassifierSet()
                 self.exploreIter = 0
                 self.correct = [0.0 for i in range(cons.trackingFrequency)]
                 self.hloss = [1 for i in range(cons.trackingFrequency)]
-                self.tp = [0.0 for i in range(cons.trackingFrequency)]
-                self.tn = [0.0 for i in range(cons.trackingFrequency)]
-                self.overGenAcc = [0.0 for i in range(cons.trackingFrequency)]
+                # self.tp = [0.0 for i in range(cons.trackingFrequency)]
+                # self.tn = [0.0 for i in range(cons.trackingFrequency)]
+                # self.overGenAcc = [0.0 for i in range(cons.trackingFrequency)]
 
             # Run the eLCS algorithm-------------------------------------------------------------------------------
             self.run_eLCS()
@@ -2066,12 +2091,12 @@ def MLRBC(arg):
                     self.population.runPopAveEval(self.exploreIter)
                     trackedAccuracy = sum(self.correct) / float(cons.trackingFrequency)  # Accuracy over the last "trackingFrequency" number of iterations.
                     trackedHloss = sum(self.hloss) / float(cons.trackingFrequency)
-                    trackedTP = sum(self.tp) / float(cons.trackingFrequency)
-                    trackedTN = sum(self.tn) / float(cons.trackingFrequency)
+                    # trackedTP = sum(self.tp) / float(cons.trackingFrequency)
+                    # trackedTN = sum(self.tn) / float(cons.trackingFrequency)
                     # trackedOverGenAcc = sum(self.overGenAcc) / float(cons.trackingFrequency)
-                    trackedOverGenAcc = 0.0
-                    self.learnTrackOut.write(self.population.getPopTrack(round(trackedHloss,4), round(trackedAccuracy, 4), self.exploreIter + 1,
-                                                                         cons.trackingFrequency, trackedTP, trackedTN, trackedOverGenAcc))  # Report learning progress to standard out and tracking file.
+                    # self.learnTrackOut.write(self.population.getPopTrack(round(trackedHloss, 4), round(trackedAccuracy, 4), self.exploreIter + 1,
+                    #                                                      cons.trackingFrequency, trackedTP, trackedTN, trackedOverGenAcc))
+                    self.learnTrackOut.write(self.population.getPopTrack(round(trackedHloss, 4), round(trackedAccuracy, 4), self.exploreIter + 1))
                 cons.timer.stopTimeEvaluation()
 
                 # -------------------------------------------------------
@@ -2131,13 +2156,8 @@ def MLRBC(arg):
             Acc = ClassAccuracy()
             cons.timer.startTimeEvaluation()
             prediction = Prediction(self.population)
-
-            if PREDICTION_METHOD == 'max':
-                prediction.calMaxPrediction()
-                phenotypePrediction = prediction.getDecision()
-            else:
-                prediction.combinePredictions(self.population)
-                phenotypePrediction = prediction.getCombPred()
+            prediction.calMaxPrediction()
+            phenotypePrediction = prediction.getDecision()
 
             itt = exploreIter % cons.trackingFrequency
             # -------------------------------------------------------
@@ -2160,11 +2180,13 @@ def MLRBC(arg):
                     target = state_phenotype_conf[1]
                     tp = 0
                     tn = 0
+                    """
                     for it in range(cons.env.formatData.ClassCount):
                         tp += int(target[it]) and int(phenotypePrediction[it])
                         tn += not (int(target[it]) or int(phenotypePrediction[it]))
                     self.tp[itt] = tp
                     self.tn[itt] = tn
+                    """
                     target_int = int(state_phenotype_conf[1], 2)
                     phenotypePrediction_int = int(phenotypePrediction, 2)
                     if phenotypePrediction_int == target_int:
@@ -2236,12 +2258,10 @@ def MLRBC(arg):
                 instances = cons.env.formatData.numTestInstances
             labelList = np.empty([instances, cons.env.formatData.ClassCount])
             targetList = np.empty([instances, cons.env.formatData.ClassCount])
-            # targetList = []
-            # labelList = []
 
-            save_path = RUN_RESULT_PATH
-            fileName = cons.outFileName + '_Prediction_Compare'
-            completeName = os.path.join(save_path, fileName)
+            # save_path = RUN_RESULT_PATH
+            # fileName = cons.outFileName + '_Prediction_Compare'
+            # completeName = os.path.join(save_path, fileName)
             # predComp = open(completeName + '_' + str(exp) + '.txt', 'w')
             # predComp.write('True label \t Max prediction \t Combined prediction \n')
 
@@ -2262,6 +2282,8 @@ def MLRBC(arg):
                         prediction.combinePredictions(self.population)
                         combPred = prediction.getCombPred()
                         combVote = prediction.getCombVote()
+
+
                     targetList[inst] = [int(l) for l in list(state_phenotype_conf[1])]     # The list of all target labels of the dataset
                     if combPred == None:
                         labelList[inst] = np.zeros(cons.env.formatData.ClassCount)
