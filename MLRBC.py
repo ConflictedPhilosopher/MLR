@@ -1763,20 +1763,17 @@ def MLRBC(arg):
                 if maxVote > 0.0:
                     for i in range(len(self.combVote)):
                         self.combVote[i] /= maxVote
-            self.classCount = len(self.combVote)
-
 
         def oneThreshold(self):
             pred = []
-            if THRESHOLD == 'onethreshold':
-                loc = 0
-                for val in self.combVote:
-                    if val >= self.theta:
-                        pred.append('1')
-                    else:
-                        pred.append('0')
-                    loc += 1
-                self.combPred = "".join(pred)
+            loc = 0
+            for val in self.combVote:
+                if val >= self.theta:
+                    pred.append('1')
+                else:
+                    pred.append('0')
+                loc += 1
+            self.combPred = "".join(pred)
 
         def rcut(self):
             card = arg[4]
@@ -1793,7 +1790,6 @@ def MLRBC(arg):
 
         def pcut(self):
             pi = arg[5]
-
 
         def getCombPred(self):
             return self.combPred
@@ -2280,6 +2276,10 @@ def MLRBC(arg):
                         combVote = [0] * cons.env.formatData.ClassCount
                     else:
                         prediction.combinePredictions(self.population)
+                        if THRESHOLD == 'onethreshold':
+                            prediction.oneThreshold()
+                        elif THRESHOLD == 'rcut':
+                            prediction.rcut()
                         combPred = prediction.getCombPred()
                         combVote = prediction.getCombVote()
 
@@ -2326,6 +2326,10 @@ def MLRBC(arg):
                         combVote = [0] * cons.env.formatData.ClassCount
                     else:
                         prediction.combinePredictions(self.population)
+                        if THRESHOLD == 'onethreshold':
+                            prediction.oneThreshold()
+                        elif THRESHOLD == 'rcut':
+                            prediction.rcut()
                         combPred = prediction.getCombPred()
                         combVote = prediction.getCombVote()
                     targetList[inst] = [int(l) for l in list(state_phenotype_conf[1])]   # The list of all target labels of the dataset

@@ -249,17 +249,47 @@ class parallelRun():
     def doParallel(self):
         arg_instances = []
         if NUMBER_OF_FOLDS > 1:
+
+            dataList = []
+            for i in range(NUMBER_OF_FOLDS):
+                foldCSV = os.path.join(DATA_FOLDER, DATA_HEADER, DATA_HEADER + "-" + str(i + 1) + ".csv")
+                dataList.append(pd.read_csv(foldCSV))
+
+            for i in range(NUMBER_OF_FOLDS):
+                trainDataCSV = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + "-" + str(i + 1) + "-csv.csv")
+                validDataCSV = os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + "-" + str(i + 1) + "-csv.csv")
+                frames = [dataList[j] for j in range(NUMBER_OF_FOLDS) if j != i]
+                dfTrain = pd.concat(frames)
+                dfValid = dataList[i]
+                dfTrain.to_csv(trainDataCSV, index = False)
+                dfValid.to_csv(validDataCSV, index = False)
+
             for it in range(NUMBER_OF_FOLDS):
                 argument = []
                 argument.append(it + 1)
-                trainFileName = TRAIN_DATA_HEADER + "-" + str(it + 1) + ".txt"
-                completeTrainFileName = os.path.join(DATA_FOLDER, DATA_HEADER, trainFileName)
-                validFileName = VALID_DATA_HEADER + "-" + str(it + 1) + ".txt"
-                completeValidFileName = os.path.join(DATA_FOLDER, DATA_HEADER, validFileName)
-                dataManage = DataManage(completeTrainFileName, completeValidFileName)
+                completeTrainFileName = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + "-" + str(it + 1) + ".txt")
+                completeValidFileName = os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + "-" + str(it + 1) + ".txt")
+                trainDataCSV = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + "-" + str(it + 1) + "-csv.csv")
+                validDataCSV = os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + "-" + str(it + 1) + "-csv.csv")
+                if os.path.isfile(completeTrainFileName):      # training.txt exists
+                    pass
+                else:
+                    if os.path.isfile(trainDataCSV):           # training.csv exists
+                        convertCSV2TXT(trainDataCSV, completeTrainFileName)
+                        convertCSV2TXT(validDataCSV, completeValidFileName)
+                    else:
+
+                        print("Error: Training/Validation Data not Found.")
+                        break
+
+                dataManage = DataManage(completeTrainFileName, completeValidFileName, self.classCount, self.dataInfo)
                 argument.append(dataManage)
+                argument.append(self.majLP)
+                argument.append(self.minLP)
+                argument.append(self.Card)
+                argument.append(self.pi)
                 arg_instances.append(argument)
-            Parallel(n_jobs = NO_PARALLEL_JOBS, verbose=1, backend="multiprocessing")(map(delayed(MLRBC.MLRBC), arg_instances))
+            Parallel(n_jobs = NUMBER_OF_FOLDS, verbose=1, backend="multiprocessing")(map(delayed(MLRBC.MLRBC), arg_instances))
         else:
             if (NO_EXPERIMENTS_AVERAGING > 1):
                 completeTrainFileName = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + ".txt")
@@ -347,7 +377,6 @@ class parallelRun():
                     self.majLP = key
                 if value == min(classDict.values()):
                     self.minLP = key
-            # print("dataProp: " + "Majority LP: " + self.majLP + " and Minority LP: " + self.minLP)
             lpIR = max(classDict.values()) / min(classDict.values())
             self.classCount = classDict
 
