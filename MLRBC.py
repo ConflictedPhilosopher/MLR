@@ -1641,9 +1641,8 @@ def MLRBC(arg):
                 self.tieBreak_TimeStamp = {}
                 self.matchCount = {}
 
-                zero = [0.0] * len(cons.env.formatData.phenotypeList[0])
+                # zero = [0.0] * len(cons.env.formatData.phenotypeList[0])
 
-                #phenotypeList = copy.deepcopy(cons.env.formatData.phenotypeList)
                 phenotypeList = []
 
                 for ref in self.population.matchSet:
@@ -1735,7 +1734,7 @@ def MLRBC(arg):
                     else:
                         self.decision = predictionValue / float(valueWeightSum)
 
-        def combinePredictions(self, population):
+        def combinePredictions(self):
 
             self.combPred = None
             self.combVote = []
@@ -1743,15 +1742,15 @@ def MLRBC(arg):
             for i in range(cons.env.formatData.ClassCount):
                 self.combVote.append(0.0)
 
-            if len(population.matchSet) == 0:
+            if len(self.population.matchSet) == 0:
                 self.combPred = None
             else:
-                for ref in population.matchSet:
-                    cl = population.popSet[ref]
-                    if any(cl.phenotype in s for s in population.labelPowerSetList):
+                for ref in self.population.matchSet:
+                    cl = self.population.popSet[ref]
+                    if any(cl.phenotype in s for s in self.population.labelPowerSetList):
                         pass
                     else:
-                        population.labelPowerSetList.append(cl.phenotype)
+                        self.population.labelPowerSetList.append(cl.phenotype)
 
                     vote = cl.fitness * cl.numerosity
                     it = 0
@@ -1788,8 +1787,21 @@ def MLRBC(arg):
                     pred.append('0')
             self.combPred = "".join(pred)
 
-        def pcut(self):
+        def pcut(self, voteList, numSamples):
+            w = 1
             pi = arg[5]
+            combPred = np.zeros((numSamples, cons.env.formatData.ClassCount), dtype=int)
+            for col in range(cons.env.formatData.ClassCount):
+                zeroPred = np.zeros(numSamples)
+                P = voteList[:, col]
+                sortIndex = np.argsort(P)
+                k = pi[col] * numSamples * w
+                selectedSamples = sortIndex[-int(k):]
+                for i in selectedSamples:
+                    zeroPred[i] = 1
+                combPred[:, col] = zeroPred
+            combPred = combPred.astype(dtype=str)
+            self.combPred = ["".join(row) for row in combPred]
 
         def getCombPred(self):
             return self.combPred
@@ -2254,91 +2266,50 @@ def MLRBC(arg):
                 instances = cons.env.formatData.numTestInstances
             labelList = np.empty([instances, cons.env.formatData.ClassCount])
             targetList = np.empty([instances, cons.env.formatData.ClassCount])
+            noPrediction = np.zeros(cons.env.formatData.ClassCount)
 
-            # save_path = RUN_RESULT_PATH
-            # fileName = cons.outFileName + '_Prediction_Compare'
-            # completeName = os.path.join(save_path, fileName)
-            # predComp = open(completeName + '_' + str(exp) + '.txt', 'w')
-            # predComp.write('True label \t Max prediction \t Combined prediction \n')
-
-            if isTrain:
-                """
-                training evaluation
-                """
+            if THRESHOLD == 'pcut':
+                voteList = []
                 for inst in range(instances):
                     state_phenotype_conf = cons.env.getTrainInstance()
                     self.population.makeEvalMatchSet(state_phenotype_conf[0])
-
                     prediction = Prediction(self.population)
-                    if PREDICTION_METHOD == 'max':
-                        prediction.calMaxPrediction()
-                        combPred = prediction.getDecision()
-                        combVote = [0] * cons.env.formatData.ClassCount
-                    else:
-                        prediction.combinePredictions(self.population)
-                        if THRESHOLD == 'onethreshold':
-                            prediction.oneThreshold()
-                        elif THRESHOLD == 'rcut':
-                            prediction.rcut()
-                        combPred = prediction.getCombPred()
-                        combVote = prediction.getCombVote()
-
-
-                    targetList[inst] = [int(l) for l in list(state_phenotype_conf[1])]     # The list of all target labels of the dataset
-                    if combPred == None:
-                        labelList[inst] = np.zeros(cons.env.formatData.ClassCount)
-                        noMatch += 1
-                    elif combPred == 'Tie':
-                        labelList[inst] = np.zeros(cons.env.formatData.ClassCount)
-                        tie += 1
-                    else:
-                        Acc.multiLablePerformace(combPred, state_phenotype_conf[1], combVote)
-                        labelList[inst] = np.array(combVote)
-                        """
-                        Sample-based metrics
-                        """
-                        Hloss += Acc.getLossSingle()
-                        precision += Acc.getPrecisionSingle()
-                        accuracy += Acc.getAccuracySingle()
-                        recall += Acc.getRecallSingle()
-                        fmeasure += Acc.getFmeasureSingle()
-                        oneError += Acc.getOneErrorSingle()
-                        rankLoss += Acc.getRankLossSingle()
-                        """
-                        Class-based metrics
-                        """
-                        Acc.updateClassBased(state_phenotype_conf[1], combPred)
+                    prediction.combinePredictions()
+                    combVote = prediction.getCombVote()
+                    voteList.append(combVote)
 
                     cons.env.newInstance(isTrain)
                     self.population.clearSets()
-            else:
-                """
-                test evaluation
-                """
-                for inst in range(instances):
-                    state_phenotype_conf = cons.env.getTestInstance()
-                    self.population.makeEvalMatchSet(state_phenotype_conf[0])
+                prediction.pcut(np.array(voteList), instances)
+                combPred = prediction.getCombPred()
 
+            else:
+                for inst in range(instances):
+                    state_phenotype_conf = cons.env.getTrainInstance()
+                    self.population.makeEvalMatchSet(state_phenotype_conf[0])
                     prediction = Prediction(self.population)
+
                     if PREDICTION_METHOD == 'max':
                         prediction.calMaxPrediction()
                         combPred = prediction.getDecision()
                         combVote = [0] * cons.env.formatData.ClassCount
-                    else:
-                        prediction.combinePredictions(self.population)
-                        if THRESHOLD == 'onethreshold':
-                            prediction.oneThreshold()
-                        elif THRESHOLD == 'rcut':
-                            prediction.rcut()
+                    elif THRESHOLD == 'onethreshold':
+                        prediction.oneThreshold()
                         combPred = prediction.getCombPred()
                         combVote = prediction.getCombVote()
-                    targetList[inst] = [int(l) for l in list(state_phenotype_conf[1])]   # The list of all target labels of the dataset
+                    elif THRESHOLD == 'rcut':
+                        prediction.rcut()
+                        combPred = prediction.getCombPred()
+                        combVote = prediction.getCombVote()
+
+                    targetList[inst] = [int(l) for l in list(state_phenotype_conf[1])]  # The list of all target labels of the dataset
+
                     if combPred == None:
+                        labelList[inst] = noPrediction
                         noMatch += 1
-                        labelList[inst] = np.zeros(cons.env.formatData.ClassCount)
                     elif combPred == 'Tie':
+                        labelList[inst] = noPrediction
                         tie += 1
-                        labelList[inst] = np.zeros(cons.env.formatData.ClassCount)
                     else:
                         Acc.multiLablePerformace(combPred, state_phenotype_conf[1], combVote)
                         labelList[inst] = np.array(combVote)

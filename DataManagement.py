@@ -94,7 +94,6 @@ class DataManage:
         if self.labelInstanceID in self.trainHeaderList:
             self.areInstanceIDs = True
             self.instanceIDRef = self.trainHeaderList.index(self.labelInstanceID)
-            # print("DataManagement: Instance ID Column location = " + str(self.instanceIDRef))
             column =+ 1
 
         self.numAttributes = len(self.trainHeaderList) - column - 1
@@ -102,7 +101,6 @@ class DataManage:
         # Identify location of phenotype column
         if self.labelPhenotype in self.trainHeaderList:
             self.phenotypeRef = self.trainHeaderList.index(self.labelPhenotype)
-            # print("DataManagement: Phenotype Column Location = " + str(self.phenotypeRef))
         else:
             print("DataManagement: Error - Phenotype column not found!  Check data set to ensure correct phenotype column label, or inclusion in the data.")
 

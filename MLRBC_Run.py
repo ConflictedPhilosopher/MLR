@@ -278,7 +278,6 @@ class parallelRun():
                         convertCSV2TXT(trainDataCSV, completeTrainFileName)
                         convertCSV2TXT(validDataCSV, completeValidFileName)
                     else:
-
                         print("Error: Training/Validation Data not Found.")
                         break
 
