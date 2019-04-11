@@ -1,4 +1,7 @@
+import os
+
 import random
+import numpy as np
 from config import *
 
 class DataManage:
@@ -34,6 +37,7 @@ class DataManage:
         print("----------------------------------------------------------------------------")
         # Detect Features of training data--------------------------------------------------------------------------
         rawTrainData = self.loadData(trainFile, True)  # Load the raw data.
+        rawTrainData = self.feasureSelection(rawTrainData)
 
         self.characterizeDataset(rawTrainData)  # Detect number of attributes, instances, and reference locations.
 
@@ -41,6 +45,7 @@ class DataManage:
             data4Formating = rawTrainData
         else:
             rawTestData = self.loadData(testFile, False)  # Load the raw data.
+            rawTestData = self.feasureSelection(rawTestData)
             self.compareDataset(rawTestData)  # Ensure that key features are the same between training and testing datasets.
             data4Formating = rawTrainData + rawTestData  # Merge Training and Testing datasets
 
@@ -76,7 +81,6 @@ class DataManage:
             print(inst)
             print('cannot open', dataFile)
             raise
-
         else:
             if doTrain:
                 self.trainHeaderList = f.readline().rstrip('\n').split('\t')  # strip off first row
@@ -87,6 +91,29 @@ class DataManage:
                 datasetList.append(lineList)
             f.close()
         return datasetList
+
+    def feasureSelection(self, dataset):
+        featureRank = []
+        dataset = np.array(dataset)
+
+        try:
+            f = open(os.path.join(DATA_FOLDER, DATA_HEADER, "feature-list.txt"), 'r')
+        except Exception as inst:
+            print(type(inst))
+            print(inst.args)
+            print(inst)
+            print('cannot open' + "feature-list.txt")
+            raise
+        else:
+            for line in f:
+                lineList = line.strip('\n').split(' ')
+                featureRank.append(lineList)
+            f.close()
+
+        featureCount = round(REDUCE_ATTRIBUTE * len(dataset[0]))
+        featureList = [int(f[1])-1 for f in featureRank]
+        reducedDataset = dataset[:, featureList[:featureCount]].tolist()
+        return reducedDataset
 
     def characterizeDataset(self, rawTrainData):
         # Detect Instance ID's and save location if they occur.  Then save number of attributes in data.
