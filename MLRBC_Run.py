@@ -12,6 +12,7 @@ from sklearn.model_selection import train_test_split
 
 from DataManagement import DataManage
 import MLRBC
+import RebootModel
 from config import *
 
 
@@ -287,6 +288,10 @@ class parallelRun():
                 argument.append(self.minLP)
                 argument.append(self.Card)
                 argument.append(self.pi)
+                if REBOOT_MODEL:
+                    modelName = os.path.join(RUN_RESULT_PATH, DATA_HEADER + "_MLRBC_RulePop_" + str(it + 1) + ".txt")
+                    Pop = RebootModel.ClassifierSet(dataManage, modelName)
+                    argument.append(Pop)
                 arg_instances.append(argument)
             Parallel(n_jobs = NUMBER_OF_FOLDS, verbose=1, backend="multiprocessing")(map(delayed(MLRBC.MLRBC), arg_instances))
         else:
@@ -530,7 +535,7 @@ def convertCSV2TXT(infilename, outfilename):
 
     try:
         df = pd.read_csv(infilename)
-        df.drop(df.columns[0], axis=1, inplace=True)
+        # df.drop(df.columns[0], axis=1, inplace=True)
         if "Class" in df:
             dfCopy = df.astype({"Class": str})
         else:

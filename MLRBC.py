@@ -17,7 +17,7 @@ def MLRBC(arg):
     outFileName = DATA_HEADER							# Path/NewName for new algorithm output files. Note: Do not give a file extension, this is done automatically.
     learningIterations = str(NO_TRAIN_ITERATION)		# Specify complete algorithm evaluation checkpoints and maximum number of learning iterations (e.g. 1000.2000.5000 = A maximum of 5000 learning iterations with evaluations at 1000, 2000, and 5000 iterations)
     N = POP_SIZE									    # Maximum size of the rule population (a.k.a. Micro-classifier population size, where N is the sum of the classifier numerosities in the population)
-    p_spec = 0.7 									    # The probability of specifying an attribute when covering. (1-p_spec = the probability of adding '#' in ternary rule representations). Greater numbers of attributes in a dataset will require lower values of p_spec.
+    p_spec = 0.4 									    # The probability of specifying an attribute when covering. (1-p_spec = the probability of adding '#' in ternary rule representations). Greater numbers of attributes in a dataset will require lower values of p_spec.
     exp = arg[0]
 
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -29,7 +29,7 @@ def MLRBC(arg):
     labelMissingData = "NA"							# Label used for any missing data in the data set.
     discreteAttributeLimit = "NA"					# The maximum number of attribute states allowed before an attribute or phenotype is considered to be continuous (Set this value >= the number of states for any discrete attribute or phenotype in their dataset).
     discretePhenotypeLimit = "NA"
-    trackingFrequency = 3500						# Specifies the number of iterations before each estimated learning progress report by the algorithm ('0' = report progress every epoch, i.e. every pass through all instances in the training data).
+    trackingFrequency = NO_TRAIN_ITERATION						# Specifies the number of iterations before each estimated learning progress report by the algorithm ('0' = report progress every epoch, i.e. every pass through all instances in the training data).
 
     ######----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Supervised Learning Parameters - Generally just use default values.
@@ -56,7 +56,7 @@ def MLRBC(arg):
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### PopulationReboot - An option to begin LCS learning from an existing, saved rule population. Note that the training data is re-shuffled during a reboot.
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    doPopulationReboot = 0							# Start eLCS from an existing rule population? (1 is True, 0 is False).
+    doPopulationReboot = REBOOT_MODEL							# Start eLCS from an existing rule population? (1 is True, 0 is False).
     popRebootPath = "None"
 
 
@@ -1779,8 +1779,8 @@ def MLRBC(arg):
             pred = []
 
             labelRanks = [i[0] for i in sorted(enumerate(self.combVote), key=lambda x: x[1])]
-            labelsetSelected = [l for l in labelRanks[self.classCount - round(card):]]
-            for i in range(self.classCount):
+            labelsetSelected = [l for l in labelRanks[cons.env.formatData.ClassCount - round(card):]]
+            for i in range(cons.env.formatData.ClassCount):
                 if i in labelsetSelected:
                     pred.append('1')
                 else:
@@ -2038,7 +2038,26 @@ def MLRBC(arg):
             # POPULATION REBOOT - Begin eLCS learning from an existing saved rule population
             # -------------------------------------------------------
             if cons.doPopulationReboot:
-                self.populationReboot()
+                self.population = arg[-1]  # Population reboot
+                self.population.runPopAveEval(self.exploreIter)
+                self.population.runAttGeneralitySum(True)
+                cons.env.startEvaluationMode()  # Preserves learning position in training data
+                if cons.testFile != 'None':  # If a testing file is available.
+                    if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
+                        trainEval = self.doPopEvaluation(True)
+                        testEval = self.doPopEvaluation(False)
+                    else:
+                        trainEval = self.doContPopEvaluation(True)
+                        testEval = self.doContPopEvaluation(False)
+                else:  # Only a training file is available
+                    if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
+                        trainEval = self.doPopEvaluation(True)
+                        testEval = None
+                    else:
+                        trainEval = self.doContPopEvaluation(True)
+                        testEval = None
+                OutputFileManager().writePopStats(cons.outFileName, trainEval, testEval, self.exploreIter + 1,
+                                                  self.population, self.correct)
 
             # -------------------------------------------------------
             # NORMAL eLCS - Run eLCS from scratch on given data
@@ -2076,10 +2095,13 @@ def MLRBC(arg):
             print("Maximum Iterations: " + str(cons.maxLearningIterations))
             print("-----------------------------------------------------------------------------------------------------")
 
+
             # -------------------------------------------------------
             # MAJOR LEARNING LOOP
             # -------------------------------------------------------
             while self.exploreIter < cons.maxLearningIterations:
+                if (self.exploreIter % 10000) == 0:
+                    print('Iteration: ', self.exploreIter)
 
                 # -------------------------------------------------------
                 # GET NEW INSTANCE AND RUN A LEARNING ITERATION
@@ -2199,7 +2221,7 @@ def MLRBC(arg):
                     phenotypePrediction_int = int(phenotypePrediction, 2)
                     if phenotypePrediction_int == target_int:
                         self.correct[itt] = 1
-                        self.hloss[itt] = 0
+                        # self.hloss[itt] = 0
                     else:
                         self.correct[itt] = 0
                         self.hloss[itt] = Acc.hammingLoss(phenotypePrediction, state_phenotype_conf[1])
@@ -2268,21 +2290,47 @@ def MLRBC(arg):
             targetList = np.empty([instances, cons.env.formatData.ClassCount])
             noPrediction = np.zeros(cons.env.formatData.ClassCount)
 
-            if THRESHOLD == 'pcut':
-                voteList = []
+            if THRESHOLD == 'pcut' and PREDICTION_METHOD == 'agg':
                 for inst in range(instances):
                     state_phenotype_conf = cons.env.getTrainInstance()
                     self.population.makeEvalMatchSet(state_phenotype_conf[0])
                     prediction = Prediction(self.population)
                     prediction.combinePredictions()
                     combVote = prediction.getCombVote()
-                    voteList.append(combVote)
-
+                    labelList[inst] = np.array(combVote)
                     cons.env.newInstance(isTrain)
                     self.population.clearSets()
-                prediction.pcut(np.array(voteList), instances)
-                combPred = prediction.getCombPred()
+                    targetList[inst] = [int(l) for l in list(state_phenotype_conf[1])]
 
+                prediction.pcut(np.array(labelList), instances)
+                combPredList = prediction.getCombPred()
+
+                for inst in range(instances):
+                    state_phenotype_conf = cons.env.getTrainInstance()
+                    combPred = combPredList[inst]
+                    if combPred == None:
+                        labelList[inst] = noPrediction
+                        noMatch += 1
+                    elif combPred == 'Tie':
+                        labelList[inst] = noPrediction
+                        tie += 1
+                    else:
+                        Acc.multiLablePerformace(combPred, state_phenotype_conf[1], labelList[inst].tolist())
+                        """
+                        Sample-based metrics
+                        """
+                        Hloss += Acc.getLossSingle()
+                        precision += Acc.getPrecisionSingle()
+                        accuracy += Acc.getAccuracySingle()
+                        recall += Acc.getRecallSingle()
+                        fmeasure += Acc.getFmeasureSingle()
+                        oneError += Acc.getOneErrorSingle()
+                        rankLoss += Acc.getRankLossSingle()
+                        """
+                        Class-based metrics
+                        """
+                        Acc.updateClassBased(state_phenotype_conf[1], combPred)
+                    cons.env.newInstance(isTrain)
             else:
                 for inst in range(instances):
                     state_phenotype_conf = cons.env.getTrainInstance()
@@ -2294,10 +2342,12 @@ def MLRBC(arg):
                         combPred = prediction.getDecision()
                         combVote = [0] * cons.env.formatData.ClassCount
                     elif THRESHOLD == 'onethreshold':
+                        prediction.combinePredictions()
                         prediction.oneThreshold()
                         combPred = prediction.getCombPred()
                         combVote = prediction.getCombVote()
                     elif THRESHOLD == 'rcut':
+                        prediction.combinePredictions()
                         prediction.rcut()
                         combPred = prediction.getCombPred()
                         combVote = prediction.getCombVote()
@@ -2431,31 +2481,6 @@ def MLRBC(arg):
             # Balanced and Standard Accuracies will only be the same when there are equal instances representative of each phenotype AND there is 100% covering.
             resultList = [adjustedAccuracyEstimate, instanceCoverage]
             return resultList
-
-        def populationReboot(self):
-            """ Manages the reformation of a previously saved eLCS classifier population. """
-            # --------------------------------------------------------------------
-            try:
-                self.learnTrackOut = open(cons.outFileName + '_LearnTrack.txt', 'a')
-            except Exception as inst:
-                print(type(inst))
-                print(inst.args)
-                print(inst)
-                print('cannot open', cons.outFileName + '_LearnTrack.txt')
-                raise
-
-            # Extract last iteration from file name---------------------------------------------
-            temp = cons.popRebootPath.split('_')
-            iterRef = len(temp) - 1
-            completedIterations = int(temp[iterRef])
-            print("Rebooting rule population after " + str(completedIterations) + " iterations.")
-            self.exploreIter = completedIterations - 1
-            for i in range(len(cons.learningCheckpoints)):  # checkpoints not in demo 2
-                cons.learningCheckpoints[i] += completedIterations
-            cons.maxLearningIterations += completedIterations
-
-            # Rebuild existing population from text file.--------
-            self.population = ClassifierSet(cons.popRebootPath)
 
 
     class OutputFileManager:

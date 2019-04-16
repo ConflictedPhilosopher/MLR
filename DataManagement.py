@@ -37,18 +37,17 @@ class DataManage:
         print("----------------------------------------------------------------------------")
         # Detect Features of training data--------------------------------------------------------------------------
         rawTrainData = self.loadData(trainFile, True)  # Load the raw data.
-        rawTrainData = self.feasureSelection(rawTrainData)
-
-        self.characterizeDataset(rawTrainData)  # Detect number of attributes, instances, and reference locations.
 
         if testFile == 'None':  # If no testing data is available, formatting relies solely on training data.
             data4Formating = rawTrainData
+            # data4Formating = self.feasureSelection(data4Formating)
         else:
-            rawTestData = self.loadData(testFile, False)  # Load the raw data.
-            rawTestData = self.feasureSelection(rawTestData)
-            self.compareDataset(rawTestData)  # Ensure that key features are the same between training and testing datasets.
+            rawTestData = self.loadData(testFile, False)
+            self.numTestInstances = len(rawTestData)
+            rawTrainData, rawTestData = self.feasureSelection(rawTrainData, rawTestData)
             data4Formating = rawTrainData + rawTestData  # Merge Training and Testing datasets
 
+        self.characterizeDataset(rawTrainData)  # Detect number of attributes, instances, and reference locations.
         self.discriminatePhenotype(data4Formating)  # Determine if endpoint/phenotype is discrete or continuous.
         if self.discretePhenotype or self.MLphenotype:
             self.discriminateClasses(rawTrainData, rawTestData)  # Detect number of unique phenotype identifiers.
@@ -92,9 +91,10 @@ class DataManage:
             f.close()
         return datasetList
 
-    def feasureSelection(self, dataset):
+    def feasureSelection(self, datasetTrain, datasetTest):
         featureRank = []
-        dataset = np.array(dataset)
+        datasetTrain = np.array(datasetTrain)
+        datasetTest = np.array(datasetTest)
 
         try:
             f = open(os.path.join(DATA_FOLDER, DATA_HEADER, "feature-list.txt"), 'r')
@@ -110,10 +110,15 @@ class DataManage:
                 featureRank.append(lineList)
             f.close()
 
-        featureCount = round(REDUCE_ATTRIBUTE * len(dataset[0]))
+        featureCount = round(REDUCE_ATTRIBUTE * len(datasetTrain[0]))
         featureList = [int(f[1])-1 for f in featureRank]
-        reducedDataset = dataset[:, featureList[:featureCount]].tolist()
-        return reducedDataset
+        selectionList = featureList[:featureCount] + [-1]
+        reducedDatasetTrain = datasetTrain[:, selectionList].tolist()
+        reducedDatasetTest = datasetTest[:, selectionList].tolist()
+
+        self.trainHeaderList = self.trainHeaderList[0:featureCount] + [self.trainHeaderList[-1]]
+        self.testHeaderList = self.testHeaderList[0:featureCount] + [self.testHeaderList[-1]]
+        return (reducedDatasetTrain, reducedDatasetTest)
 
     def characterizeDataset(self, rawTrainData):
         # Detect Instance ID's and save location if they occur.  Then save number of attributes in data.
