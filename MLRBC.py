@@ -2333,7 +2333,10 @@ def MLRBC(arg):
                     cons.env.newInstance(isTrain)
             else:
                 for inst in range(instances):
-                    state_phenotype_conf = cons.env.getTrainInstance()
+                    if isTrain:
+                        state_phenotype_conf = cons.env.getTrainInstance()
+                    else:
+                        state_phenotype_conf = cons.env.getTestInstance()
                     self.population.makeEvalMatchSet(state_phenotype_conf[0])
                     prediction = Prediction(self.population)
 
