@@ -29,7 +29,7 @@ def MLRBC(arg):
     labelMissingData = "NA"							# Label used for any missing data in the data set.
     discreteAttributeLimit = "NA"					# The maximum number of attribute states allowed before an attribute or phenotype is considered to be continuous (Set this value >= the number of states for any discrete attribute or phenotype in their dataset).
     discretePhenotypeLimit = "NA"
-    trackingFrequency = NO_TRAIN_ITERATION						# Specifies the number of iterations before each estimated learning progress report by the algorithm ('0' = report progress every epoch, i.e. every pass through all instances in the training data).
+    trackingFrequency = 10000 #NO_TRAIN_ITERATION						# Specifies the number of iterations before each estimated learning progress report by the algorithm ('0' = report progress every epoch, i.e. every pass through all instances in the training data).
 
     ######----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Supervised Learning Parameters - Generally just use default values.
@@ -870,8 +870,8 @@ def MLRBC(arg):
         # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         def updateAccuracy(self):
             if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
-                self.accuracy = self.correctCount / float(self.matchCount)
-                # self.accuracy = self.f1 / float(self.matchCount)
+                # self.accuracy = self.correctCount / float(self.matchCount)
+                self.accuracy = 1 - (self.loss / float(self.matchCount))
 
             else:
                 if random.random() < 0.5:
@@ -1628,7 +1628,6 @@ def MLRBC(arg):
         def __init__(self, population):
             self.decision = None
             self.population = population
-            self.theta = 0.7
 
         def calMaxPrediction(self):
             # -------------------------------------------------------
@@ -1767,7 +1766,7 @@ def MLRBC(arg):
             pred = []
             loc = 0
             for val in self.combVote:
-                if val >= self.theta:
+                if val >= THETA_THRESHOLD:
                     pred.append('1')
                 else:
                     pred.append('0')
@@ -1777,9 +1776,13 @@ def MLRBC(arg):
         def rcut(self):
             card = arg[4]
             pred = []
+            if RCUT_T is None:
+                t = round(card)
+            else:
+                t = RCUT_T
 
             labelRanks = [i[0] for i in sorted(enumerate(self.combVote), key=lambda x: x[1])]
-            labelsetSelected = [l for l in labelRanks[cons.env.formatData.ClassCount - round(card):]]
+            labelsetSelected = [l for l in labelRanks[cons.env.formatData.ClassCount - t:]]
             for i in range(cons.env.formatData.ClassCount):
                 if i in labelsetSelected:
                     pred.append('1')
@@ -1788,14 +1791,13 @@ def MLRBC(arg):
             self.combPred = "".join(pred)
 
         def pcut(self, voteList, numSamples):
-            w = 1
             pi = arg[5]
             combPred = np.zeros((numSamples, cons.env.formatData.ClassCount), dtype=int)
             for col in range(cons.env.formatData.ClassCount):
                 zeroPred = np.zeros(numSamples)
                 P = voteList[:, col]
                 sortIndex = np.argsort(P)
-                k = pi[col] * numSamples * w
+                k = pi[col] * numSamples * PCUT_W
                 selectedSamples = sortIndex[-int(k):]
                 for i in selectedSamples:
                     zeroPred[i] = 1
@@ -2038,9 +2040,10 @@ def MLRBC(arg):
             # POPULATION REBOOT - Begin eLCS learning from an existing saved rule population
             # -------------------------------------------------------
             if cons.doPopulationReboot:
+                self.correct = [0.0 for i in range(cons.trackingFrequency)]
                 self.population = arg[-1]  # Population reboot
-                self.population.runPopAveEval(self.exploreIter)
-                self.population.runAttGeneralitySum(True)
+                # self.population.runPopAveEval(self.exploreIter)
+                # self.population.runAttGeneralitySum(True)
                 cons.env.startEvaluationMode()  # Preserves learning position in training data
                 if cons.testFile != 'None':  # If a testing file is available.
                     if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
@@ -2056,7 +2059,7 @@ def MLRBC(arg):
                     else:
                         trainEval = self.doContPopEvaluation(True)
                         testEval = None
-                OutputFileManager().writePopStats(cons.outFileName, trainEval, testEval, self.exploreIter + 1,
+                OutputFileManager().writePopStats(cons.outFileName, trainEval, testEval, NO_TRAIN_ITERATION,
                                                   self.population, self.correct)
 
             # -------------------------------------------------------
@@ -2085,8 +2088,8 @@ def MLRBC(arg):
                 # self.tn = [0.0 for i in range(cons.trackingFrequency)]
                 # self.overGenAcc = [0.0 for i in range(cons.trackingFrequency)]
 
-            # Run the eLCS algorithm-------------------------------------------------------------------------------
-            self.run_eLCS()
+                # Run the eLCS algorithm-------------------------------------------------------------------------------
+                self.run_eLCS()
 
         def run_eLCS(self):
             """ Runs the initialized eLCS algorithm. """
@@ -2292,7 +2295,10 @@ def MLRBC(arg):
 
             if THRESHOLD == 'pcut' and PREDICTION_METHOD == 'agg':
                 for inst in range(instances):
-                    state_phenotype_conf = cons.env.getTrainInstance()
+                    if isTrain:
+                        state_phenotype_conf = cons.env.getTrainInstance()
+                    else:
+                        state_phenotype_conf = cons.env.getTestInstance()
                     self.population.makeEvalMatchSet(state_phenotype_conf[0])
                     prediction = Prediction(self.population)
                     prediction.combinePredictions()
@@ -2306,7 +2312,10 @@ def MLRBC(arg):
                 combPredList = prediction.getCombPred()
 
                 for inst in range(instances):
-                    state_phenotype_conf = cons.env.getTrainInstance()
+                    if isTrain:
+                        state_phenotype_conf = cons.env.getTrainInstance()
+                    else:
+                        state_phenotype_conf = cons.env.getTestInstance()
                     combPred = combPredList[inst]
                     if combPred == None:
                         labelList[inst] = noPrediction
@@ -2412,6 +2421,7 @@ def MLRBC(arg):
             MLperformance["micro-F"] = Acc.getMicroF()
             MLperformance["macro-F"] = Acc.getMacroF()
             MLperformance["AUC-score"] = roc_auc.mean()
+            self.perfreport = MLperformance
 
             predictionFail = float(noMatch) / float(instances)
             predictionTies = float(tie) / float(instances)
@@ -2421,7 +2431,7 @@ def MLRBC(arg):
             # Adjusted Balanced Accuracy is calculated such that instances that did not match have a consistent probability of being correctly classified in the reported accuracy.
             print("-----------------------------------------------")
             print(str(myType) + " Evaluation Results on model " + str(arg[0]) +  ":")
-            Acc.reportMLperformance(MLperformance)
+            # Acc.reportMLperformance(MLperformance)
             print("Instance Coverage: " + str(instanceCoverage * 100.0) + '%')
             print("Prediction Ties: " + str(predictionTies * 100.0) + '%')
             print("------------------------------------------------")
@@ -2606,6 +2616,7 @@ def MLRBC(arg):
     env = Offline_Environment()
     cons.referenceEnv(env) #Passes the environment to 'Constants' (cons) so that it can be easily accessed from anywhere within the code.
     cons.parseIterations() #Identify the maximum number of learning iterations as well as evaluation checkpoints.
-    eLCS()
+    alg = eLCS()
+    return(alg.perfreport)
 
 

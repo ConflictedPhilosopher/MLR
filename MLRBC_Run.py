@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 from math import sqrt
 from sklearn.model_selection import train_test_split
+from collections import Counter
 
 from DataManagement import DataManage
 import MLRBC
@@ -293,7 +294,8 @@ class parallelRun():
                     Pop = RebootModel.ClassifierSet(dataManage, modelName)
                     argument.append(Pop)
                 arg_instances.append(argument)
-            Parallel(n_jobs = NUMBER_OF_FOLDS, verbose=1, backend="multiprocessing")(map(delayed(MLRBC.MLRBC), arg_instances))
+            measures = Parallel(n_jobs = NUMBER_OF_FOLDS, verbose=1, backend="multiprocessing")(map(delayed(MLRBC.MLRBC), arg_instances))
+            self.meanPerformance(measures)
         else:
             if (NO_EXPERIMENTS_AVERAGING > 1):
                 completeTrainFileName = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + ".txt")
@@ -326,8 +328,14 @@ class parallelRun():
                     argument.append(self.minLP)
                     argument.append(self.Card)
                     argument.append(self.pi)
+                    if REBOOT_MODEL:
+                        modelName = os.path.join(RUN_RESULT_PATH,
+                                                 DATA_HEADER + "_MLRBC_RulePop_" + str(it + 1) + ".txt")
+                        Pop = RebootModel.ClassifierSet(dataManage, modelName)
+                        argument.append(Pop)
                     arg_instances.append(argument)
-                Parallel(n_jobs = NO_PARALLEL_JOBS, verbose = 1, backend = "multiprocessing")(map(delayed(MLRBC.MLRBC), arg_instances))
+                measures = Parallel(n_jobs = NO_PARALLEL_JOBS, verbose = 1, backend = "multiprocessing")(map(delayed(MLRBC.MLRBC), arg_instances))
+                self.meanPerformance(measures)
             else:
                 completeTrainFileName = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + ".txt")
                 completeValidFileName = os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + ".txt")
@@ -352,6 +360,12 @@ class parallelRun():
                         convertCSV2TXT(os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + "-csv.csv"), completeValidFileName)
                 dataManage = DataManage(completeTrainFileName, completeValidFileName, self.classCount, self.dataInfo)
                 MLRBC.MLRBC([1, dataManage, self.majLP, self.minLP, self.Card, self.pi])
+
+    def meanPerformance(self, perfReports):
+        total = sum(map(Counter, perfReports), Counter())
+        meanPerf = {key: val/len(perfReports) for key, val in total.items()}
+        print("Average ML performance:\n")
+        print(meanPerf)
 
     def dataProp(self, infilename):
         """

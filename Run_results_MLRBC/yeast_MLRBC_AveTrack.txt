@@ -1,2 +1,0 @@
-Iteration	MacroP	MicroP	HL	Acc	Gen	tp	tn	OverGenAcc
-100.0	70.0	79.0	0.2532	0.2050	0.5150	0.0000	0.0000	0.0000

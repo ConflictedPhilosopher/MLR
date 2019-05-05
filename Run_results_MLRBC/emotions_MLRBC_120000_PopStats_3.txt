@@ -1,0 +1,21 @@
+Performance Statistics:------------------------------------------------------------------------
+Training Coverage	Testing Coverage	Training Performance	Test Performance
+1.0	1.0	{'HammingLoss': 0.3738277919863598, 'Precision': 0.985933503836317, 'Accuracy': 0.4449275362318841, 'Recall': 0.4462915601023018, 'F-measure': 0.5963950797710392, 'oneError': 0.0792838874680307, 'rankLoss': 0.04558113100312588, 'micro-F': 0.6131972957743005, 'macro-F': 0.6267150089784794, 'AUC-score': 0.9663011488864554}	{'HammingLoss': 0.39851485148514854, 'Precision': 0.9034653465346534, 'Accuracy': 0.4385313531353139, 'Recall': 0.44801980198019803, 'F-measure': 0.5840169731258851, 'oneError': 0.3118811881188119, 'rankLoss': 0.19771727172717268, 'micro-F': 0.5983995674704143, 'macro-F': 0.6001980330933508, 'AUC-score': 0.7991008911246652}
+
+Population Characterization:------------------------------------------------------------------------
+MacroPopSize	MicroPopSize	Generality
+14542	14542	0.00
+
+SpecificitySum:------------------------------------------------------------------------
+Att1	Att2	Att3	Att4	Att5	Att6	Att7	Att8	Att9	Att10	Att11	Att12	Att13	Att14	Att15	Att16	Att17	Att18	Att19	Att20	Att21	Att22
+
+AccuracySum:------------------------------------------------------------------------
+Att1	Att2	Att3	Att4	Att5	Att6	Att7	Att8	Att9	Att10	Att11	Att12	Att13	Att14	Att15	Att16	Att17	Att18	Att19	Att20	Att21	Att22
+
+Run Time(in minutes):------------------------------------------------------------------------
+Global Time	0.0
+Matching Time	0.0
+Deletion Time	0.0
+Subsumption Time	0.0
+Selection Time	0.0
+Evaluation Time	0.0

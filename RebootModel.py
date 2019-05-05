@@ -173,10 +173,11 @@ class ClassifierSet:
         self.expRules = 0.0
         self.attributeSpecList = []
         self.attributeAccList = []
+        self.labelPowerSetList = []
         self.avePhenotypeRange = 0.0
         self.numAttributes = dataManage.numAttributes
         self.attributeInfo = dataManage.attributeInfo
-        self.discretePhenotype = dataManage.discretePhenotype
+        self.discretePhenotype = dataManage.MLphenotype
         self.dataInfo = [self.numAttributes, self.attributeInfo, self.discretePhenotype]
 
         # Set Constructors-------------------------------------
@@ -186,6 +187,20 @@ class ClassifierSet:
             self.rebootPop(a)  # Initialize a population based on an existing saved rule population
         else:
             print("ClassifierSet: Error building population.")
+
+    def makeEvalMatchSet(self, state):
+        """ Constructs a match set for evaluation purposes which does not activate either covering or deletion. """
+        popSize = len(self.popSet)
+        for i in range(popSize):  # Go through the population
+            cl = self.popSet[i]  # A single classifier
+            if cl.match(state):  # Check for match
+                self.matchSet.append(i)  # Add classifier to match set
+
+    def clearSets(self):
+        """ Clears out references in the match and correct sets for the next learning iteration. """
+        self.matchSet = []
+        self.correctSet = []
+
     # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     # POPULATION CONSTRUCTOR METHODS
     # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -216,5 +231,3 @@ class ClassifierSet:
             cl = Classifier(self.dataInfo, each)
             self.popSet.append(cl)
             self.microPopSize += 1
-        #print("Rebooted Rule Population has " + str(len(self.popSet)) + " Macro Pop Size.")
-
