@@ -17,39 +17,39 @@ def MLRBC(arg):
     outFileName = DATA_HEADER							# Path/NewName for new algorithm output files. Note: Do not give a file extension, this is done automatically.
     learningIterations = str(NO_TRAIN_ITERATION)		# Specify complete algorithm evaluation checkpoints and maximum number of learning iterations (e.g. 1000.2000.5000 = A maximum of 5000 learning iterations with evaluations at 1000, 2000, and 5000 iterations)
     N = POP_SIZE									    # Maximum size of the rule population (a.k.a. Micro-classifier population size, where N is the sum of the classifier numerosities in the population)
-    p_spec = 0.4 									    # The probability of specifying an attribute when covering. (1-p_spec = the probability of adding '#' in ternary rule representations). Greater numbers of attributes in a dataset will require lower values of p_spec.
+    p_spec = 1 - P_HASH 									    # The probability of specifying an attribute when covering. (1-p_spec = the probability of adding '#' in ternary rule representations). Greater numbers of attributes in a dataset will require lower values of p_spec.
     exp = arg[0]
+    random.seed(exp)
 
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Logistical Run Parameters
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    randomSeed = False								# Set a constant random seed value to some integer (in order to obtain reproducible results). Put 'False' if none (for pseudo-random algorithm runs).
     labelInstanceID = "InstanceID"					# Label for the data column header containing instance ID's.  If included label not found, algorithm assumes that no instance ID's were included.
     labelPhenotype = "Class"							# Label for the data column header containing the phenotype label. (Typically 'Class' for case/control datasets)
     labelMissingData = "NA"							# Label used for any missing data in the data set.
     discreteAttributeLimit = "NA"					# The maximum number of attribute states allowed before an attribute or phenotype is considered to be continuous (Set this value >= the number of states for any discrete attribute or phenotype in their dataset).
     discretePhenotypeLimit = "NA"
-    trackingFrequency = 10000 #NO_TRAIN_ITERATION						# Specifies the number of iterations before each estimated learning progress report by the algorithm ('0' = report progress every epoch, i.e. every pass through all instances in the training data).
+    trackingFrequency = 5000 #NO_TRAIN_ITERATION						# Specifies the number of iterations before each estimated learning progress report by the algorithm ('0' = report progress every epoch, i.e. every pass through all instances in the training data).
 
     ######----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Supervised Learning Parameters - Generally just use default values.
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    nu = 5											# (v) Power parameter used to determine the importance of high accuracy when calculating fitness. (typically set to 5, recommended setting of 1 in noisy data)
+    nu = 10											# (v) Power parameter used to determine the importance of high accuracy when calculating fitness. (typically set to 5, recommended setting of 1 in noisy data)
     chi = 0.8										# (X) The probability of applying crossover in the GA. (typically set to 0.5-1.0)
     upsilon = 0.04									# (u) The probability of mutating an allele within an offspring.(typically set to 0.01-0.05)
-    theta_GA = 25									# The GA threshold; The GA is applied in a set when the average time since the last GA in the set is greater than theta_GA.
+    theta_GA = 50									# The GA threshold; The GA is applied in a set when the average time since the last GA in the set is greater than theta_GA.
     theta_del = 20									# The deletion experience threshold; The calculation of the deletion probability changes once this threshold is passed.
-    theta_sub = 20									# The subsumption experience threshold;
+    theta_sub = 200									# The subsumption experience threshold;
     acc_sub = 0.99									# Subsumption accuracy requirement
     beta = 0.1										# Learning parameter; Used in calculating average correct set size
     delta = 0.1										# Deletion parameter; Used in determining deletion vote calculation.
     init_fit = 0.01									# The initial fitness for a new classifier. (typically very small, approaching but not equal to zero)
     fitnessReduction = 0.1							# Initial fitness reduction in GA offspring rules.
-
+    error = 0.05
     ######-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Algorithm Heuristic Options
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    doSubsumption = 0								# Activate Subsumption? (1 is True, 0 is False).  Subsumption is a heuristic that actively seeks to increase generalization in the rule population.
+    doSubsumption = 1								# Activate Subsumption? (1 is True, 0 is False).  Subsumption is a heuristic that actively seeks to increase generalization in the rule population.
     selectionMethod = 'tournament'		    		# Select GA parent selection strategy ('tournament' or 'roulette')
     theta_sel = 0.2									# The fraction of the correct set to be included in tournament selection.
 
@@ -218,13 +218,14 @@ def MLRBC(arg):
             self.p_spec = p_spec  # float(par['p_spec'])                                      #Saved as float
             self.majLP = arg[2]
             self.minLP = arg[3]
+            self.error = error
 
             # Logistical Run Parameters ------------------------------------------------------------------------------------
-            if randomSeed == False:
-                self.useSeed = False  # Saved as Boolean
-            else:
-                self.useSeed = True  # Saved as Boolean
-                self.randomSeed = randomSeed  # int(par['randomSeed'])                #Saved as integer
+            # if randomSeed == False:
+            #     self.useSeed = False  # Saved as Boolean
+            # else:
+            #     self.useSeed = True  # Saved as Boolean
+            #     self.randomSeed = randomSeed  # int(par['randomSeed'])                #Saved as integer
 
             self.labelInstanceID = labelInstanceID  # par['labelInstanceID']                           #Saved as text
             self.labelPhenotype = labelPhenotype  # par['labelPhenotype']                             #Saved as text
@@ -273,9 +274,6 @@ def MLRBC(arg):
 
             self.learningCheckpoints = checkpoints  # next two lines needed for reboot
             self.maxLearningIterations = self.learningCheckpoints[(len(self.learningCheckpoints) - 1)]  # ???
-
-            # self.learningCheckpoints = 64
-            # self.maxLearningIterations = learningIterations
 
             if self.trackingFrequency == 0:
                 self.trackingFrequency = self.env.formatData.numTrainInstances  # Adjust tracking frequency to match the training data size - learning tracking occurs once every epoch
@@ -416,11 +414,11 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # GENERATE MATCHING CONDITION
             # -------------------------------------------------------
-            # while len(self.specifiedAttList) < 1:
-            for attRef in range(len(state)):
-                if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
-                    self.specifiedAttList.append(attRef)
-                    self.condition.append(self.buildMatch(attRef, state))
+            while len(self.specifiedAttList) < 1:
+                for attRef in range(len(state)):
+                    if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
+                        self.specifiedAttList.append(attRef)
+                        self.condition.append(self.buildMatch(attRef, state))
 
         def classifierCopy(self, clOld, exploreIter):
             """  Constructs an identical Classifier.  However, the experience of the copy is set to 0 and the numerosity
@@ -873,21 +871,15 @@ def MLRBC(arg):
                 # self.accuracy = self.correctCount / float(self.matchCount)
                 self.accuracy = 1 - (self.loss / float(self.matchCount))
 
-            else:
-                if random.random() < 0.5:
-                    self.accuracy = self.precision / float(self.matchCount)
-                else:
-                    self.accuracy = self.recall / float(self.matchCount)
 
-        def updateFitness(self):
-            """ Update the fitness parameter. """
-            if cons.env.formatData.discretePhenotype:
-                self.fitness = pow(self.accuracy, cons.nu)
-            elif cons.env.formatData.MLphenotype:
+        def updateFitness(self, matchSetNumAcc):
+            if cons.env.formatData.MLphenotype:
                 if self.matchCount < 1.0 / cons.beta:
                     self.fitness = pow(self.accuracy, cons.nu)
                 else:
-                    self.fitness = pow(self.accuracy, cons.nu) / (1 + 0)
+                    self.fitness = pow(self.accuracy, cons.nu)
+                    # k = self.accuracy * self.numerosity /(matchSetNumAcc)
+                    # self.fitness = self.fitness + cons.beta * (k - self.fitness)
             else:
                 if (self.phenotype[1] - self.phenotype[0]) >= cons.env.formatData.phenotypeRange:
                     self.fitness = 0.0
@@ -913,18 +905,11 @@ def MLRBC(arg):
             """ Increases the correct phenotype tracking by one. Once an epoch has completed, rule accuracy can't change."""
             self.correctCount += 1
 
-        def updateLoss(self, TruePhenotype):  # Will not be necessary
+        def updateLoss(self, TruePhenotype):
             # Update the loss value of the classifier
             a = np.array(list(TruePhenotype)).astype(int)
             b = np.array(list(self.phenotype)).astype(int)
-            loss = sum([e for e in a ^ b])
-            """
-            loss = 0
-            for c in range(len(self.phenotype)):
-                if self.phenotype[c] != TruePhenotype[c]:
-                    loss += 1
-            loss = loss / len(self.phenotype)
-            """
+            loss = sum([e for e in a ^ b]) / len(self.phenotype)
             self.loss += loss
 
         def updateMLperformance(self, TruePhenotype, combVote):  # New
@@ -1414,7 +1399,7 @@ def MLRBC(arg):
                 self.microPopSize += 1
                 cl2P.updateNumerosity(1)
             else:
-                self.subsumeClassifier2(cl);  # Try to subsume in the correct set.
+                self.subsumeClassifier2(cl)  # Try to subsume in the correct set.
 
         def subsumeClassifier2(self, cl):
             """ Tries to subsume a classifier in the correct set. If no subsumption is possible the classifier is simply added to the population considering
@@ -1501,6 +1486,7 @@ def MLRBC(arg):
             """ Updates all relevant parameters in the current match and correct sets. """
 
             matchSetNumerosity = 0
+            matchSetNumAcc = 0
             for ref in self.matchSet:
                 matchSetNumerosity += self.popSet[ref].numerosity
 
@@ -1509,10 +1495,11 @@ def MLRBC(arg):
                 self.popSet[ref].updateMatchSetSize(matchSetNumerosity)
                 if ref in self.correctSet:
                     self.popSet[ref].updateCorrect()
-                self.popSet[ref].updateMLperformance(state_phenotype_conf[1], None)  # New
+                self.popSet[ref].updateLoss(state_phenotype_conf[1])
+                # self.popSet[ref].updateMLperformance(state_phenotype_conf[1], None)  # New
                 self.popSet[ref].updateAccuracy()
-                self.popSet[ref].updateFitness()
-
+                self.popSet[ref].updateFitness(matchSetNumAcc)
+                # matchSetNumAcc += self.popSet[ref].numerosity * self.popSet[ref].accuracy
 
         # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         # OTHER METHODS
@@ -2097,12 +2084,12 @@ def MLRBC(arg):
             print("Learning Checkpoints: " + str(cons.learningCheckpoints))
             print("Maximum Iterations: " + str(cons.maxLearningIterations))
             print("-----------------------------------------------------------------------------------------------------")
-
+            loss_previous = 1.0
 
             # -------------------------------------------------------
             # MAJOR LEARNING LOOP
             # -------------------------------------------------------
-            while self.exploreIter < cons.maxLearningIterations:
+            while self.exploreIter < int(cons.learningIterations):
                 if (self.exploreIter % 10000) == 0:
                     print('Iteration: ', self.exploreIter)
 
@@ -2120,10 +2107,20 @@ def MLRBC(arg):
                 # -------------------------------------------------------
                 # TRACK LEARNING ESTIMATES
                 # -------------------------------------------------------
+
                 if (self.exploreIter % cons.trackingFrequency) == (cons.trackingFrequency - 1) and self.exploreIter > 0:
                     self.population.runPopAveEval(self.exploreIter)
                     trackedAccuracy = sum(self.correct) / float(cons.trackingFrequency)  # Accuracy over the last "trackingFrequency" number of iterations.
                     trackedHloss = sum(self.hloss) / float(cons.trackingFrequency)
+                    cons.env.startEvaluationMode()
+                    testEval = self.doPopEvaluation(False)
+                    d = abs(testEval[1]['HammingLoss'] - loss_previous)
+                    if d < cons.error:
+                        cons.learningIterations = self.exploreIter
+                        print(d)
+                    else:
+                        loss_previous = testEval[1]['HammingLoss']
+
                     # trackedTP = sum(self.tp) / float(cons.trackingFrequency)
                     # trackedTN = sum(self.tn) / float(cons.trackingFrequency)
                     # trackedOverGenAcc = sum(self.overGenAcc) / float(cons.trackingFrequency)
@@ -2135,7 +2132,7 @@ def MLRBC(arg):
                 # -------------------------------------------------------
                 # CHECKPOINT - COMPLETE EVALUTATION OF POPULATION - strategy different for discrete vs continuous phenotypes
                 # -------------------------------------------------------
-                if (self.exploreIter + 1) in cons.learningCheckpoints:
+                if (self.exploreIter) in [int(cons.learningIterations)]:
                     cons.timer.startTimeEvaluation()
                     print("-------------------------------------------------------------------------------------------------------------------")
                     print("Running Population Evaluation after " + str(self.exploreIter + 1) + " iterations.")
@@ -2428,14 +2425,8 @@ def MLRBC(arg):
             instanceCoverage = 1.0 - predictionFail
             predictionMade = 1.0 - (predictionFail + predictionTies)
 
-            # Adjusted Balanced Accuracy is calculated such that instances that did not match have a consistent probability of being correctly classified in the reported accuracy.
-            print("-----------------------------------------------")
-            print(str(myType) + " Evaluation Results on model " + str(arg[0]) +  ":")
-            # Acc.reportMLperformance(MLperformance)
-            print("Instance Coverage: " + str(instanceCoverage * 100.0) + '%')
-            print("Prediction Ties: " + str(predictionTies * 100.0) + '%')
-            print("------------------------------------------------")
-
+            # print("-----------------------------------------------")
+            # print(str(myType) + " Evaluation Results on model " + str(arg[0]) +  ":")
             resultList = [instanceCoverage, MLperformance]
             return resultList
 
@@ -2510,8 +2501,6 @@ def MLRBC(arg):
                 print(inst)
                 print('cannot open', outFile + '_' + str(exploreIter) + '_PopStats_' + str(exp) + '.txt')
                 raise
-            else:
-                print("Writing Population Statistical Summary File...")
 
             # Evaluation of pop
             popStatsOut.write(
@@ -2589,8 +2578,6 @@ def MLRBC(arg):
                 print(inst)
                 print('cannot open', outFile + '_RulePop_' + str(exp) + '.txt')
                 raise
-            else:
-                print("Writing Population as Data File...")
 
             # Write Header-----------------------------------------------------------------------------------------------------------------------------------------------
             dataLink = cons.env.formatData

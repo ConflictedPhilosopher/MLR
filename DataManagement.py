@@ -106,13 +106,16 @@ class DataManage:
             raise
         else:
             for line in f:
-                lineList = line.strip('\n').split(' ')
-                featureRank.append(lineList)
+                featureRank = line.strip('\n').split(',')
             f.close()
 
-        featureCount = round(REDUCE_ATTRIBUTE * (len(datasetTrain[0])-1))
-        featureList = [int(f[1])-1 for f in featureRank]
-        selectionList = featureList[:featureCount] + [-1]
+        if REDUCE_ATTRIBUTE < 1:
+            featureCount = round(REDUCE_ATTRIBUTE * (len(datasetTrain[0])-1))
+            featureList = [int(f)-1 for f in featureRank]
+            selectionList = featureList[:featureCount] + [-1]
+        elif len(featureRank) < (len(datasetTrain[0])-1):
+            featureList = [int(f) - 1 for f in featureRank]
+            selectionList = featureList + [-1]
         reducedDatasetTrain = datasetTrain[:, selectionList].tolist()
         reducedDatasetTest = datasetTest[:, selectionList].tolist()
 

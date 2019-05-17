@@ -1,0 +1,21 @@
+Performance Statistics:------------------------------------------------------------------------
+Training Coverage	Testing Coverage	Training Performance	Test Performance
+1.0	1.0	{'HammingLoss': 0.16912280701754384, 'Precision': 0.7196491228070176, 'Accuracy': 0.6374385964912279, 'Recall': 0.7312280701754384, 'F-measure': 0.7012631578947378, 'oneError': 0.0, 'rankLoss': 1.0, 'micro-F': 0.7241875538448727, 'macro-F': 0.7101655447479004, 'AUC-score': 0.5}	{'HammingLoss': 0.2259887005649717, 'Precision': 0.6101694915254238, 'Accuracy': 0.5254237288135595, 'Recall': 0.6341807909604521, 'F-measure': 0.59774011299435, 'oneError': 0.0, 'rankLoss': 1.0, 'micro-F': 0.6245006671705963, 'macro-F': 0.605624496429357, 'AUC-score': 0.5}
+
+Population Characterization:------------------------------------------------------------------------
+MacroPopSize	MicroPopSize	Generality
+2889	2889	0.00
+
+SpecificitySum:------------------------------------------------------------------------
+Mean_Acc1298_Mean_Mem40_Centroid	Mean_Acc1298_Mean_Mem40_Rolloff	Mean_Acc1298_Mean_Mem40_Flux	Mean_Acc1298_Mean_Mem40_MFCC_0	Mean_Acc1298_Mean_Mem40_MFCC_1	Mean_Acc1298_Mean_Mem40_MFCC_2	Mean_Acc1298_Mean_Mem40_MFCC_3	Mean_Acc1298_Mean_Mem40_MFCC_4	Mean_Acc1298_Mean_Mem40_MFCC_5	Mean_Acc1298_Mean_Mem40_MFCC_6	Mean_Acc1298_Mean_Mem40_MFCC_7	Mean_Acc1298_Mean_Mem40_MFCC_8	Mean_Acc1298_Mean_Mem40_MFCC_9	Mean_Acc1298_Mean_Mem40_MFCC_10	Mean_Acc1298_Mean_Mem40_MFCC_11	Mean_Acc1298_Mean_Mem40_MFCC_12	Mean_Acc1298_Std_Mem40_Centroid	Mean_Acc1298_Std_Mem40_Rolloff	Mean_Acc1298_Std_Mem40_Flux	Mean_Acc1298_Std_Mem40_MFCC_0	Mean_Acc1298_Std_Mem40_MFCC_1	Mean_Acc1298_Std_Mem40_MFCC_2
+
+AccuracySum:------------------------------------------------------------------------
+Mean_Acc1298_Mean_Mem40_Centroid	Mean_Acc1298_Mean_Mem40_Rolloff	Mean_Acc1298_Mean_Mem40_Flux	Mean_Acc1298_Mean_Mem40_MFCC_0	Mean_Acc1298_Mean_Mem40_MFCC_1	Mean_Acc1298_Mean_Mem40_MFCC_2	Mean_Acc1298_Mean_Mem40_MFCC_3	Mean_Acc1298_Mean_Mem40_MFCC_4	Mean_Acc1298_Mean_Mem40_MFCC_5	Mean_Acc1298_Mean_Mem40_MFCC_6	Mean_Acc1298_Mean_Mem40_MFCC_7	Mean_Acc1298_Mean_Mem40_MFCC_8	Mean_Acc1298_Mean_Mem40_MFCC_9	Mean_Acc1298_Mean_Mem40_MFCC_10	Mean_Acc1298_Mean_Mem40_MFCC_11	Mean_Acc1298_Mean_Mem40_MFCC_12	Mean_Acc1298_Std_Mem40_Centroid	Mean_Acc1298_Std_Mem40_Rolloff	Mean_Acc1298_Std_Mem40_Flux	Mean_Acc1298_Std_Mem40_MFCC_0	Mean_Acc1298_Std_Mem40_MFCC_1	Mean_Acc1298_Std_Mem40_MFCC_2
+
+Run Time(in minutes):------------------------------------------------------------------------
+Global Time	0.0
+Matching Time	0.0
+Deletion Time	0.0
+Subsumption Time	0.0
+Selection Time	0.0
+Evaluation Time	0.0

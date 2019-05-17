@@ -346,6 +346,7 @@ class parallelRun():
                 if os.path.isfile(completeTrainFileName):      # training.txt exists
                     pass
                 else:
+
                     if os.path.isfile(trainDataCSV):           # training.csv exists
                         convertCSV2TXT(trainDataCSV, completeTrainFileName)
                         convertCSV2TXT(validDataCSV, completeValidFileName)
@@ -365,7 +366,7 @@ class parallelRun():
         total = sum(map(Counter, perfReports), Counter())
         meanPerf = {key: val/len(perfReports) for key, val in total.items()}
         print("Average ML performance:\n")
-        print(meanPerf)
+        print([round(val, 4) for val in meanPerf.values()])
 
     def dataProp(self, infilename):
         """
@@ -515,6 +516,7 @@ class parallelRun():
                 outData["label" + str(l)] = [row[l] for row in listLabels]
 
         if DOWN_SAMPLE_RATIO < 1.0:
+            print('Dataset down sampled.')
             sampleCount = round(len(outData) * DOWN_SAMPLE_RATIO)
             outData = outData.loc[0: sampleCount]
 
