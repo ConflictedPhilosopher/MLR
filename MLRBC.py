@@ -414,11 +414,11 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # GENERATE MATCHING CONDITION
             # -------------------------------------------------------
-            while len(self.specifiedAttList) < 1:
-                for attRef in range(len(state)):
-                    if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
-                        self.specifiedAttList.append(attRef)
-                        self.condition.append(self.buildMatch(attRef, state))
+            # while len(self.specifiedAttList) < 1:
+            for attRef in range(len(state)):
+                if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
+                    self.specifiedAttList.append(attRef)
+                    self.condition.append(self.buildMatch(attRef, state))
 
         def classifierCopy(self, clOld, exploreIter):
             """  Constructs an identical Classifier.  However, the experience of the copy is set to 0 and the numerosity
