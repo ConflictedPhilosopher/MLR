@@ -1,3 +1,0 @@
-Explore_Iteration	MacroPopSize	MicroPopSize	Hamming_Loss	Accuracy	AveGenerality	Time(min)
-5000	2761	3000	0.6037	0.3714	0.55	2.81	0.000	0.000	0.000
-10000	2826	3000	0.4792	0.5418	0.54	5.01	0.000	0.000	0.000

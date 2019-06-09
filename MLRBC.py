@@ -34,10 +34,10 @@ def MLRBC(arg):
     ######----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Supervised Learning Parameters - Generally just use default values.
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    nu = 10											# (v) Power parameter used to determine the importance of high accuracy when calculating fitness. (typically set to 5, recommended setting of 1 in noisy data)
+    nu = 2											# (v) Power parameter used to determine the importance of high accuracy when calculating fitness. (typically set to 5, recommended setting of 1 in noisy data)
     chi = 0.8										# (X) The probability of applying crossover in the GA. (typically set to 0.5-1.0)
     upsilon = 0.04									# (u) The probability of mutating an allele within an offspring.(typically set to 0.01-0.05)
-    theta_GA = 50									# The GA threshold; The GA is applied in a set when the average time since the last GA in the set is greater than theta_GA.
+    theta_GA = 15									# The GA threshold; The GA is applied in a set when the average time since the last GA in the set is greater than theta_GA.
     theta_del = 20									# The deletion experience threshold; The calculation of the deletion probability changes once this threshold is passed.
     theta_sub = 200									# The subsumption experience threshold;
     acc_sub = 0.99									# Subsumption accuracy requirement
@@ -246,6 +246,7 @@ def MLRBC(arg):
             self.delta = delta  # float(par['delta'])
             self.init_fit = init_fit  # float(par['init_fit'])                                  #Saved as float
             self.fitnessReduction = fitnessReduction  # float(par['fitnessReduction'])
+            self.ruleCompactionMethod = None #'A9'
 
             # Algorithm Heuristic Options --New-------------------------------------------------------------------------
             self.doSubsumption = doSubsumption  # bool(int(par['doSubsumption']))                    #Saved as Boolean
@@ -414,11 +415,11 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # GENERATE MATCHING CONDITION
             # -------------------------------------------------------
-            # while len(self.specifiedAttList) < 1:
-            for attRef in range(len(state)):
-                if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
-                    self.specifiedAttList.append(attRef)
-                    self.condition.append(self.buildMatch(attRef, state))
+            while len(self.specifiedAttList) < 1:
+                for attRef in range(len(state)):
+                    if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
+                        self.specifiedAttList.append(attRef)
+                        self.condition.append(self.buildMatch(attRef, state))
 
         def classifierCopy(self, clOld, exploreIter):
             """  Constructs an identical Classifier.  However, the experience of the copy is set to 0 and the numerosity
@@ -2046,8 +2047,30 @@ def MLRBC(arg):
                     else:
                         trainEval = self.doContPopEvaluation(True)
                         testEval = None
+
+                if cons.ruleCompactionMethod != None:
+                    RC = RuleCompaction(self.population, trainEval[1], testEval[1])
+                    self.population = RC.pop
+
+                    if cons.testFile != 'None':  # If a testing file is available.
+                        if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
+                            trainEval = self.doPopEvaluation(True)
+                            testEval = self.doPopEvaluation(False)
+                        else:
+                            trainEval = self.doContPopEvaluation(True)
+                            testEval = self.doContPopEvaluation(False)
+                    else:  # Only a training file is available
+                        if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
+                            trainEval = self.doPopEvaluation(True)
+                            testEval = None
+                        else:
+                            trainEval = self.doContPopEvaluation(True)
+                            testEval = None
+
                 OutputFileManager().writePopStats(cons.outFileName, trainEval, testEval, NO_TRAIN_ITERATION,
                                                   self.population, self.correct)
+
+
 
             # -------------------------------------------------------
             # NORMAL eLCS - Run eLCS from scratch on given data
@@ -2158,6 +2181,32 @@ def MLRBC(arg):
                     cons.env.stopEvaluationMode()  # Returns to learning position in training data
                     cons.timer.stopTimeEvaluation()
                     cons.timer.returnGlobalTimer()
+
+                    if cons.ruleCompactionMethod != None:
+                        RC = RuleCompaction(self.population, trainEval[1], testEval[1])
+                        self.population = RC.pop
+
+                        print(
+                            "----------------------------------------------------------------")
+                        print("Running Population Evaluation after rule compaction...")
+
+                        self.population.runPopAveEval(self.exploreIter)
+                        self.population.runAttGeneralitySum(True)
+                        cons.env.startEvaluationMode()  # Preserves learning position in training data
+                        if cons.testFile != 'None':  # If a testing file is available.
+                            if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
+                                trainEval = self.doPopEvaluation(True)
+                                testEval = self.doPopEvaluation(False)
+                            else:
+                                trainEval = self.doContPopEvaluation(True)
+                                testEval = self.doContPopEvaluation(False)
+                        else:  # Only a training file is available
+                            if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
+                                trainEval = self.doPopEvaluation(True)
+                                testEval = None
+                            else:
+                                trainEval = self.doContPopEvaluation(True)
+                                testEval = None
 
                     # Write output files----------------------------------------------------------------------------------------------------------
                     OutputFileManager().writePopStats(cons.outFileName, trainEval, testEval, self.exploreIter + 1,
@@ -2592,6 +2641,1447 @@ def MLRBC(arg):
                 rulePopOut.write(str(cl.printClassifier()))
 
             rulePopOut.close()
+
+
+    class RuleCompaction:
+        def __init__(self, pop, originalTrainAcc, originalTestAcc):
+            """ Initialize and run the specified rule compaction strategy. """
+            print(
+                "------------------------------------------------------------------------------------------------------------------------------------------------------------")
+            print("Starting Rule Compaction Algorithm (" + str(cons.ruleCompactionMethod) + ") on Model " + str(exp)+ "...")
+            self.pop = pop
+            self.originalTrainLoss = originalTrainAcc['HammingLoss']
+            self.originalTestLoss = originalTestAcc['HammingLoss']
+
+            # print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            # print("Original Training Accuracy = " + str(self.originalTrainLoss))
+            # print("Original test Loss = " + str(self.originalTestLoss))
+
+            # Rule Compaction Strategies Included in the Paper----------------------------------------------------------------------------------------------------------------
+            # Strategy Naming Key: (Code Name = Paper Draft Name = Final Paper Name)
+
+            # A8 = Dixion = CRA2
+            # A9 = UCRA = PDRC
+            # A12 = Fu1 = Fu1
+            # A13 = Fu2 = Fu2
+            # A17 = QCRA = PDRC
+            # QRC = QRC = QRF
+
+            if cons.ruleCompactionMethod == 'A8':  # Existing Published Strategy: Based on Dixon and Shoeleh's method, use the product of accuracy and generality
+                self.Approach8()
+            elif cons.ruleCompactionMethod == 'A9':  # Use the product of accuracy, generality and numerosity
+                self.Approach9()
+            elif cons.ruleCompactionMethod == 'A12':  # Existing Published Strategy: Completely follow Fu's approach 1
+                self.Approach12()
+            elif cons.ruleCompactionMethod == 'A13':  # Existing Published Strategy: Completely follow Fu's approach 2
+                self.Approach13()
+            elif cons.ruleCompactionMethod == 'A17':  # Quick fitness covering
+                self.Approach17()
+            elif cons.ruleCompactionMethod == 'QRC':
+                self.QuickRuleCleanup()
+
+            # Unused Early Experimental Rule Compaction Strategies:-------------------------------------------------------------------------------------------------------------
+            elif cons.ruleCompactionMethod == 'A1':  # Training Accuracy Based (Stage 1,2,3), Stage 3 uses match covering to rank rules
+                self.Approach1()
+            elif cons.ruleCompactionMethod == 'A2':  # Training Accuracy Based (Stage 1,2,3), Stage 3 uses fitness to rank rules
+                self.Approach2()
+            elif cons.ruleCompactionMethod == 'A3':  # Training Accuracy Based (Stage 1,2), Light Compaction - NO STAGE 3
+                self.Approach3()
+            elif cons.ruleCompactionMethod == 'A4':  # Testing Accuracy Based (Stage 1,2), Light Compaction - NO STAGE 3
+                self.Approach4()
+            elif cons.ruleCompactionMethod == 'A5':  # Experimental - remove likely bad rules without evaluations then follow with standard Training Accuracy Based State 1, and 2.
+                self.Approach5()
+            elif cons.ruleCompactionMethod == 'A6':  # Based on Dixon's method, only use accuracy
+                self.Approach6()
+            elif cons.ruleCompactionMethod == 'A7':  # Based on Dixon's method, use the product of accuracy and numerosity
+                self.Approach7()
+            elif cons.ruleCompactionMethod == 'A10':  # Rule's entropy method introduced by Kharbat
+                self.Approach10()
+            elif cons.ruleCompactionMethod == 'A11':  # stage 1: QRC, stage 2: match covering (same to A1)
+                self.Approach11()
+            elif cons.ruleCompactionMethod == 'A14':  # stage 1: QRC, stage 2: use fitness to rank rules and do covering
+                self.Approach14()
+            elif cons.ruleCompactionMethod == 'A15':  # Only use fitness to rank rules and do covering
+                self.Approach15()
+            elif cons.ruleCompactionMethod == 'A16':  # Only use numerosity to rank rules and do covering
+                self.Approach16()
+            elif cons.ruleCompactionMethod == 'A18':  # Stage 1,2 + Quick fitness covering
+                self.Approach18()
+            else:
+                print("RuleCompaction: Error - specified rule compaction strategy not found.")
+
+        ############################################################################################################################################################################################
+        def Approach8(self):
+            """ This approach is based on Dixon's method. For each sample, form a match set and then a correct set. The most useful rule in
+                the correct set is moved into the final ruleset. In this approach, the most useful rule has the largest product of accuracy
+                and generality."""
+
+            retainedClassifiers = []
+            self.matchSet = []
+            self.correctSet = []
+
+            cons.env.startEvaluationMode()
+            cons.env.resetDataRef(True)
+            for j in range(cons.env.formatData.numTrainInstances):
+                state_class = cons.env.getTrainInstance()
+                state = state_class[0]
+                classification = state_class[1]
+
+                # Create MatchSet
+                for i in range(len(self.pop.popSet)):
+                    cl = self.pop.popSet[i]
+                    if cl.match(state):
+                        self.matchSet.append(i)
+
+                # Create CorrectSet
+                for i in range(len(self.matchSet)):
+                    ref = self.matchSet[i]
+                    if self.pop.popSet[ref].phenotype == classification:
+                        self.correctSet.append(ref)
+
+                # Find the rule with highest accuracy, generality product
+                highestValue = 0
+                highestRef = 0
+                for i in range(len(self.correctSet)):
+                    ref = self.correctSet[i]
+                    product = self.pop.popSet[ref].accuracy * (
+                    cons.env.formatData.numAttributes - len(self.pop.popSet[ref].condition)) / float(
+                        cons.env.formatData.numAttributes)
+                    if product > highestValue:
+                        highestValue = product
+                        highestRef = ref
+
+                # If the rule is not already in the final ruleset, move it to the final ruleset
+                if highestValue == 0 or self.pop.popSet[highestRef] in retainedClassifiers:
+                    pass
+                else:
+                    retainedClassifiers.append(self.pop.popSet[highestRef])
+
+                # Move to the next instance
+                cons.env.newInstance(True)
+                self.matchSet = []
+                self.correctSet = []
+            cons.env.stopEvaluationMode()
+
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+            return self.pop
+
+        ############################################################################################################################################################################################
+        def Approach9(self):
+            """ This approach is based on Dixon's approach, called UCRA in the paper. For each sample, form a match set and then a correct set.
+            The most useful rule in the correct set is moved into the final ruleset. In this approach, the most useful rule has the largest
+            product of accuracy, numerosity and generality."""
+
+            retainedClassifiers = []
+            self.matchSet = []
+            self.correctSet = []
+
+            cons.env.startEvaluationMode()
+            cons.env.resetDataRef(True)
+            for j in range(cons.env.formatData.numTrainInstances):
+                state_class = cons.env.getTrainInstance()
+                state = state_class[0]
+                classification = state_class[1]
+
+                # Create MatchSet
+                for i in range(len(self.pop.popSet)):
+                    cl = self.pop.popSet[i]
+                    if cl.match(state):
+                        self.matchSet.append(i)
+
+                # Create CorrectSet
+                for i in range(len(self.matchSet)):
+                    ref = self.matchSet[i]
+                    if self.pop.popSet[ref].phenotype == classification:
+                        self.correctSet.append(ref)
+
+                # Find the rule with highest accuracy, generality and numerosity product
+                highestValue = 0.0
+                highestRef = 0.0
+                for i in range(len(self.correctSet)):
+                    ref = self.correctSet[i]
+                    product = self.pop.popSet[ref].accuracy * (
+                    cons.env.formatData.numAttributes - len(self.pop.popSet[ref].condition)) / float(
+                        cons.env.formatData.numAttributes) * self.pop.popSet[ref].numerosity
+                    if product > highestValue:
+                        highestValue = product
+                        highestRef = ref
+
+                # If the rule is not already in the final ruleset, move it to the final ruleset
+                if highestValue == 0 or self.pop.popSet[highestRef] in retainedClassifiers:
+                    pass
+                else:
+                    retainedClassifiers.append(self.pop.popSet[highestRef])
+
+                # Move to the next instance
+                cons.env.newInstance(True)
+                self.matchSet = []
+                self.correctSet = []
+            cons.env.stopEvaluationMode()
+
+            self.pop.popSet = retainedClassifiers
+            count = 0
+            for cl in self.pop.popSet:
+                count += cl.numerosity
+            self.pop.microPopSize = count
+
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def Approach12(self):
+            """ This approach completely follows Fu's first approach. In the third stage, the number of samples a rule matched is used to rank
+        	the rules and guide covering. Ranking list is updated each time some samples are covered and removed from the training set. """
+            # Order Classifier Set---------------------------------------------------------------------------------------------------------
+
+            lastGood_popSet = sorted(self.pop.popSet, key=self.numerositySort)
+            self.pop.popSet = lastGood_popSet[:]
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTrainAcc))
+            #        for i in range(len(self.pop.popSet)):
+            #            print self.pop.popSet[i].numerosity
+            # STAGE 1----------------------------------------------------------------------------------------------------------------------
+            keepGoing = True
+            while keepGoing:
+                del self.pop.popSet[0]  # Remove next classifier
+                newAccuracy = self.performanceEvaluation(True)  # Perform classifier set training accuracy evaluation
+                #print(newAccuracy)
+                if newAccuracy < self.originalTrainAcc:
+                    keepGoing = False
+                    self.pop.popSet = lastGood_popSet[:]
+                else:
+                    lastGood_popSet = self.pop.popSet[:]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 2----------------------------------------------------------------------------------------------------------------------
+            retainedClassifiers = []
+            RefAccuracy = self.originalTrainAcc
+            for i in range(len(self.pop.popSet)):
+                heldClassifier = self.pop.popSet[0]
+                del self.pop.popSet[0]
+                newAccuracy = self.performanceEvaluation(True)  # Perform classifier set training accuracy evaluation
+                #print(newAccuracy)
+                if newAccuracy < RefAccuracy:
+                    retainedClassifiers.append(heldClassifier)
+                    RefAccuracy = newAccuracy
+
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 2 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 3----------------------------------------------------------------------------------------------------------------------
+            finalClassifiers = []
+            completelyGeneralRuleRef = None
+            if len(self.pop.popSet) == 0:  # Stop Check
+                keepGoing = False
+            else:
+                keepGoing = True
+
+            # Make the match count list in preparation for state 3-------------------------------------------------------------------------
+            matchCountList = [0.0 for v in range(len(self.pop.popSet))]
+            cons.env.startEvaluationMode()
+            for i in range(len(self.pop.popSet)):  # For the population of classifiers
+                cons.env.resetDataRef(True)
+                for j in range(cons.env.formatData.numTrainInstances):  # For each instance in training data
+                    cl = self.pop.popSet[i]
+                    state = cons.env.getTrainInstance()[0]
+                    doesMatch = cl.match(state)
+                    if doesMatch:
+                        matchCountList[i] += 1
+                    cons.env.newInstance(True)
+                if len(self.pop.popSet[i].condition) == 0:
+                    completelyGeneralRuleRef = i
+            #print(matchCountList)
+            cons.env.stopEvaluationMode()
+            if completelyGeneralRuleRef != None:  # gets rid of completely general rule.
+                del matchCountList[completelyGeneralRuleRef]
+                del self.pop.popSet[completelyGeneralRuleRef]
+
+            # ----------------------------------------------------------------------------------------------------------------------------
+            tempEnv = copy.deepcopy(cons.env)
+            trainingData = tempEnv.formatData.trainFormatted
+            while len(trainingData) > 0 and keepGoing:
+                bestRef = None
+                bestValue = None
+                for i in range(len(matchCountList)):
+                    if bestValue == None or bestValue < matchCountList[i]:
+                        bestRef = i
+                        bestValue = matchCountList[i]
+
+                if bestValue == 0.0 or len(self.pop.popSet) < 1:
+                    keepGoing = False
+                    continue
+                print(bestRef, bestValue)
+
+                # Update Training Data----------------------------------------------------------------------------------------------------
+                matchedData = 0
+                w = 0
+                cl = self.pop.popSet[bestRef]
+                for i in range(len(trainingData)):
+                    state = trainingData[w][0]
+                    doesMatch = cl.match(state)
+                    if doesMatch:
+                        matchedData += 1
+                        del trainingData[w]
+                    else:
+                        w += 1
+                if matchedData > 0:
+                    # Add best classifier to final list - only do this if there are any remaining matching data instances for this rule!
+                    finalClassifiers.append(self.pop.popSet[bestRef])
+
+                # Update classifier list
+                del self.pop.popSet[bestRef]
+
+                # re-calculate match count list
+                matchCountList = [0.0 for v in range(len(self.pop.popSet))]
+                for i in range(len(self.pop.popSet)):
+                    dataRef = 0
+                    for j in range(len(trainingData)):  # For each instance in training data
+                        cl = self.pop.popSet[i]
+                        state = trainingData[dataRef][0]
+                        doesMatch = cl.match(state)
+                        if doesMatch:
+                            matchCountList[i] += 1
+                        dataRef += 1
+                print(matchCountList)
+
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+
+            self.pop.popSet = finalClassifiers
+            print("STAGE 3 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def Approach13(self):
+            """ This approach completely follows Fu's second approach. All three stages use accuracy to sort rules."""
+
+            # Order Classifier Set---------------------------------------------------------------------------------------------------------
+            lastGood_popSet = sorted(self.pop.popSet, key=self.numerositySort)
+            self.pop.popSet = lastGood_popSet[:]
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTrainAcc))
+
+            # STAGE 1----------------------------------------------------------------------------------------------------------------------
+            keepGoing = True
+            while keepGoing:
+                del self.pop.popSet[0]  # Remove next classifier
+                newAccuracy = self.performanceEvaluation(True)  # Perform classifier set training accuracy evaluation
+                print(newAccuracy)  # DEBUG
+                if newAccuracy < self.originalTrainAcc:
+                    keepGoing = False
+                    self.pop.popSet = lastGood_popSet[:]
+                else:
+                    lastGood_popSet = self.pop.popSet[:]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 2----------------------------------------------------------------------------------------------------------------------
+            retainedClassifiers = []
+            RefAccuracy = self.originalTrainAcc
+            for i in range(len(self.pop.popSet)):
+                heldClassifier = self.pop.popSet[0]
+                del self.pop.popSet[0]
+                newAccuracy = self.performanceEvaluation(True)  # Perform classifier set training accuracy evaluation
+
+                if newAccuracy < RefAccuracy:
+                    retainedClassifiers.append(heldClassifier)
+                    RefAccuracy = newAccuracy
+
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 2 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 3----------------------------------------------------------------------------------------------------------------------
+            Sort_popSet = sorted(self.pop.popSet, key=self.numerositySort, reverse=True)
+            self.pop.popSet = Sort_popSet[:]
+            RefAccuary = self.performanceEvaluation(True)
+
+            if len(self.pop.popSet) == 0:  # Stop check
+                keepGoing = False
+            else:
+                keepGoing = True
+
+            for i in range(len(self.pop.popSet)):
+                heldClassifier = self.pop.popSet[0]
+                del self.pop.popSet[0]
+                newAccuracy = self.performanceEvaluation(True)  # Perform classifier set training accuracy evaluation
+
+                if newAccuracy < RefAccuracy:
+                    self.pop.popSet.append(heldClassifier)
+                else:
+                    RefAccuracy = newAccuracy
+
+            print("STAGE 3 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def QuickRuleCleanup(self):
+            """ An extremely fast rule compaction strategy. Removes any rule with an accuracy below 50% and any rule that covers only one instance, but specifies more than one attribute
+             (won't get rid of rare variant rules)"""
+
+            # STAGE 1----------------------------------------------------------------------------------------------------------------------
+            retainedClassifiers = []
+            for i in range(len(self.pop.popSet)):
+                if self.pop.popSet[i].accuracy <= 0.5 or (
+                        self.pop.popSet[i].correctCount == 1 and len(self.pop.popSet[i].specifiedAttList) > 1):
+                    pass
+                else:
+                    retainedClassifiers.append(self.pop.popSet[i])
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+            return self.pop
+
+        ############################################################################################################################################################################################
+        def Approach17(self):
+            """Called QCRA in the paper. It uses fitness to rank rules and guide covering. It's the same as Approach 15, but the code is re-written in
+            order to speed up."""
+
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTrainAcc))
+            print("Original Testing Accuracy = " + str(self.originalTestAcc))
+
+            # STAGE 1----------------------------------------------------------------------------------------------------------------------
+            finalClassifiers = []
+            if len(self.pop.popSet) == 0:  # Stop check
+                keepGoing = False
+            else:
+                keepGoing = True
+
+            lastGood_popSet = sorted(self.pop.popSet, key=self.accuracySort, reverse=True)
+            self.pop.popSet = lastGood_popSet[:]
+
+            tempEnv = copy.deepcopy(cons.env)
+            trainingData = tempEnv.formatData.trainFormatted
+
+            while len(trainingData) > 0 and keepGoing:
+                newTrainSet = []
+                matchedData = 0
+                for w in range(len(trainingData)):
+                    cl = self.pop.popSet[0]
+                    state = trainingData[w][0]
+                    doesMatch = cl.match(state)
+                    if doesMatch:
+                        matchedData += 1
+                    else:
+                        newTrainSet.append(trainingData[w])
+                if matchedData > 0:
+                    finalClassifiers.append(self.pop.popSet[
+                                                0])  # Add best classifier to final list - only do this if there are any remaining matching data instances for this rule!
+                # Update classifier list and training set list
+                trainingData = newTrainSet
+                del self.pop.popSet[0]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+
+            self.pop.popSet = finalClassifiers
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def Approach1(self):
+            """ A CRA based approach introduced by Fu 2000. The first two stages are the same as Fu's approach. The third stage first use how
+            many samples a rule matched to rank the rule. Then the covering is done based on the ranking. The ranking list is not updated each
+            time some samples are covered and removed from the training set. """
+            # Order Classifier Set---------------------------------------------------------------------------------------------------------
+            lastGood_popSet = sorted(self.pop.popSet, key=self.numerositySort)
+            self.pop.popSet = lastGood_popSet[:]
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTrainAcc))
+
+            # STAGE 1----------------------------------------------------------------------------------------------------------------------
+            keepGoing = True
+            while keepGoing:
+                del self.pop.popSet[0]  # Remove next classifier
+                newAccuracy = self.performanceEvaluation(True)  # Perform classifier set training accuracy evaluation
+                print(newAccuracy)  # DEBUG
+                if newAccuracy < self.originalTrainAcc:
+                    keepGoing = False
+                    self.pop.popSet = lastGood_popSet[:]
+                else:
+                    lastGood_popSet = self.pop.popSet[:]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 2----------------------------------------------------------------------------------------------------------------------
+            retainedClassifiers = []
+            RefAccuracy = self.originalTrainAcc
+            for i in range(len(self.pop.popSet)):
+                heldClassifier = self.pop.popSet[0]
+                del self.pop.popSet[0]
+                newAccuracy = self.performanceEvaluation(True)  # Perform classifier set training accuracy evaluation
+                print(newAccuracy)
+                if newAccuracy < RefAccuracy:
+                    retainedClassifiers.append(heldClassifier)
+                    RefAccuracy = newAccuracy
+
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 2 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 3----------------------------------------------------------------------------------------------------------------------
+            finalClassifiers = []
+            completelyGeneralRuleRef = None
+            if len(self.pop.popSet) == 0:  # Stop Check
+                keepGoing = False
+            else:
+                keepGoing = True
+
+            # Make the match count list in preparation for state 3-------------------------------------------------------------------------
+            matchCountList = [0.0 for v in range(len(self.pop.popSet))]
+            cons.env.startEvaluationMode()
+            for i in range(len(self.pop.popSet)):  # For the population of classifiers
+                cons.env.resetDataRef(True)
+                for j in range(cons.env.formatData.numTrainInstances):  # For each instance in training data
+                    cl = self.pop.popSet[i]
+                    state = cons.env.getTrainInstance()[0]
+                    doesMatch = cl.match(state)
+                    if doesMatch:
+                        matchCountList[i] += 1
+                    cons.env.newInstance(True)
+                if len(self.pop.popSet[i].condition) == 0:
+                    completelyGeneralRuleRef = i
+
+            cons.env.stopEvaluationMode()
+            if completelyGeneralRuleRef != None:  # gets rid of completely general rule.
+                del matchCountList[completelyGeneralRuleRef]
+                del self.pop.popSet[completelyGeneralRuleRef]
+
+            # ----------------------------------------------------------------------------------------------------------------------------
+            tempEnv = copy.deepcopy(cons.env)
+            trainingData = tempEnv.formatData.trainFormatted
+            while len(trainingData) > 0 and keepGoing:
+                bestRef = None
+                bestValue = None
+                for i in range(len(matchCountList)):
+                    if bestValue == None or bestValue < matchCountList[i]:
+                        bestRef = i
+                        bestValue = matchCountList[i]
+
+                if bestValue == 0.0 or len(self.pop.popSet) < 1:
+                    keepGoing = False
+                    continue
+
+                # Update Training Data----------------------------------------------------------------------------------------------------
+                newTrainSet = []
+                matchedData = 0
+                for w in range(len(trainingData)):
+                    cl = self.pop.popSet[bestRef]
+                    state = trainingData[w][0]
+                    doesMatch = cl.match(state)
+                    if doesMatch:
+                        matchedData += 1
+                    else:
+                        newTrainSet.append(trainingData[w])
+                if matchedData > 0:
+                    finalClassifiers.append(self.pop.popSet[
+                                                bestRef])  # Add best classifier to final list - only do this if there are any remaining matching data instances for this rule!
+                # Update classifier list and training set list
+                trainingData = newTrainSet
+                del self.pop.popSet[bestRef]
+                del matchCountList[bestRef]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+
+            self.pop.popSet = finalClassifiers
+            print("STAGE 3 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def Approach2(self):
+            """ A variant of CRA based approach introduced by Fu 2000. The first two stages are the same as Fu's approach. In the third stage,
+            fitness is used to rank the rules and guide covering. Ranking list is updated each time some samples are covered and removed from
+            the training set. """
+
+            # Order Classifier Set---------------------------------------------------------------------------------------------------------
+            print(self.pop.popSet)
+            lastGood_popSet = sorted(self.pop.popSet, key=self.numerositySort)
+            self.pop.popSet = lastGood_popSet[:]
+            print(self.pop.popSet)
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTrainAcc))
+
+            # STAGE 1----------------------------------------------------------------------------------------------------------------------
+            keepGoing = True
+            while keepGoing:
+                del self.pop.popSet[0]  # Remove next classifier
+                newAccuracy = self.performanceEvaluation(True)  # Perform classifier set training accuracy evaluation
+                print(newAccuracy)  # DEBUG
+                if newAccuracy < self.originalTrainAcc:
+                    keepGoing = False
+                    self.pop.popSet = lastGood_popSet[:]
+                else:
+                    lastGood_popSet = self.pop.popSet[:]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 2----------------------------------------------------------------------------------------------------------------------
+            retainedClassifiers = []
+            RefAccuracy = self.originalTrainAcc
+            for i in range(len(self.pop.popSet)):
+                heldClassifier = self.pop.popSet[0]
+                del self.pop.popSet[0]
+                newAccuracy = self.performanceEvaluation(True)  # Perform classifier set training accuracy evaluation
+
+                if newAccuracy < RefAccuracy:
+                    retainedClassifiers.append(heldClassifier)
+                    RefAccuracy = newAccuracy
+
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 2 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 3----------------------------------------------------------------------------------------------------------------------
+            finalClassifiers = []
+            completelyGeneralRuleRef = None
+            if len(self.pop.popSet) == 0:  # Stop check
+                keepGoing = False
+            else:
+                keepGoing = True
+
+            fitnessList = [0.0 for v in range(len(self.pop.popSet))]
+            for i in range(len(self.pop.popSet)):
+                fitnessList[i] = self.pop.popSet[i].fitness
+
+            for i in range(len(self.pop.popSet)):  # For the population of classifiers
+                if len(self.pop.popSet[i].condition) == 0:
+                    completelyGeneralRuleRef = i
+
+            if completelyGeneralRuleRef != None:  # gets rid of completely general rule.
+                del fitnessList[completelyGeneralRuleRef]
+                del self.pop.popSet[completelyGeneralRuleRef]
+            # ----------------------------------------------------------------------------------------------------------------------------
+            tempEnv = copy.deepcopy(cons.env)
+            trainingData = tempEnv.formatData.trainFormatted
+            while len(trainingData) > 0 and keepGoing:
+                bestRef = None
+                bestValue = None
+                for i in range(len(fitnessList)):
+                    if bestValue == None or bestValue < fitnessList[i]:
+                        bestRef = i
+                        bestValue = fitnessList[i]
+
+                if bestValue == 0.0 or len(self.pop.popSet) < 1:
+                    keepGoing = False
+                    continue
+
+                # Update Training Data----------------------------------------------------------------------------------------------------
+                newTrainSet = []
+                matchedData = 0
+                for w in range(len(trainingData)):
+                    cl = self.pop.popSet[bestRef]
+                    state = trainingData[w][0]
+                    doesMatch = cl.match(state)
+                    if doesMatch:
+                        matchedData += 1
+                    else:
+                        newTrainSet.append(trainingData[w])
+                if matchedData > 0:
+                    finalClassifiers.append(self.pop.popSet[
+                                                bestRef])  # Add best classifier to final list - only do this if there are any remaining matching data instances for this rule!
+                # Update classifier list and training set list
+                trainingData = newTrainSet
+                del self.pop.popSet[bestRef]
+                del fitnessList[bestRef]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+
+            self.pop.popSet = finalClassifiers
+            print("STAGE 3 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def Approach3(self):
+            """ A light Rule compaction algorithm - Uses Training accuracy throughout, ranks by numerosity originally
+            leaves out stage 3 - intended to just remove major noisy rules """
+
+            # Order Classifier Set---------------------------------------------------------------------------------------------------------
+            lastGood_popSet = sorted(self.pop.popSet, key=self.numerositySort)
+            self.pop.popSet = lastGood_popSet[:]
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTrainAcc))
+
+            # STAGE 1----------------------------------------------------------------------------------------------------------------------
+            keepGoing = True
+            while keepGoing:
+                del self.pop.popSet[0]  # Remove next classifier
+                newAccuracy = self.performanceEvaluation(True)  # Perform classifier set training accuracy evaluation
+                print(newAccuracy)  # DEBUG
+                if newAccuracy < self.originalTrainAcc:
+                    keepGoing = False
+                    self.pop.popSet = lastGood_popSet[:]
+                else:
+                    lastGood_popSet = self.pop.popSet[:]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 2----------------------------------------------------------------------------------------------------------------------
+            retainedClassifiers = []
+            RefAccuracy = self.originalTrainAcc
+
+            for i in range(len(self.pop.popSet)):
+                heldClassifier = self.pop.popSet[0]
+                del self.pop.popSet[0]
+                newAccuracy = self.performanceEvaluation(True)  # Perform classifier set training accuracy evaluation
+                if newAccuracy < RefAccuracy:
+                    retainedClassifiers.append(heldClassifier)
+                    RefAccuracy = newAccuracy
+
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 2 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def Approach4(self):
+            """ A light Rule compaction algorithm  Uses Testing accuracy throughout, ranks by numerosity originally
+            leaves out stage 3 - intended to make a maximally small rule set. """
+
+            # Order Classifier Set---------------------------------------------------------------------------------------------------------
+            lastGood_popSet = sorted(self.pop.popSet, key=self.numerositySort)
+            self.pop.popSet = lastGood_popSet[:]
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTestAcc))
+
+            # STAGE 1----------------------------------------------------------------------------------------------------------------------
+            keepGoing = True
+            while keepGoing:
+                del self.pop.popSet[0]  # Remove next classifier
+                newAccuracy = self.performanceEvaluation(False)  # Perform classifier set training accuracy evaluation
+                print(newAccuracy)  # DEBUG
+                if newAccuracy < self.originalTestAcc:
+                    keepGoing = False
+                    self.pop.popSet = lastGood_popSet[:]
+                else:
+                    lastGood_popSet = self.pop.popSet[:]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 2----------------------------------------------------------------------------------------------------------------------
+            retainedClassifiers = []
+            RefAccuracy = self.originalTrainAcc
+            for i in range(len(self.pop.popSet)):
+                heldClassifier = self.pop.popSet[0]
+                del self.pop.popSet[0]
+                newAccuracy = self.performanceEvaluation(False)  # Perform classifier set test accuracy evaluation
+
+                if newAccuracy < RefAccuracy:
+                    retainedClassifiers.append(heldClassifier)
+                    RefAccuracy = newAccuracy
+
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 2 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def Approach5(self):
+            """ Experimental Approach: remove likely bad rules without evaluations then follow with standard Training Accuracy Based State 1,
+            and 2. """
+
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTrainAcc))
+            print("Original Testing Accuracy = " + str(self.originalTestAcc))
+
+            # STAGE 1----------------------------------------------------------------------------------------------------------------------
+            retainedClassifiers = []
+            for i in range(len(self.pop.popSet)):
+                if self.pop.popSet[i].getAccuracy() > 0.5:
+                    retainedClassifiers.append(self.pop.popSet[i])
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 2----------------------------------------------------------------------------------------------------------------------
+            # Order Classifier Set---------------------------------------------------------------------------------------------------------
+            lastGood_popSet = sorted(self.pop.popSet, key=self.numerositySort)
+            self.pop.popSet = lastGood_popSet[:]
+            keepGoing = True
+            while keepGoing:
+                del self.pop.popSet[0]  # Remove next classifier
+                newAccuracy = self.performanceEvaluation(True)  # Perform classifier set training accuracy evaluation
+                if newAccuracy < self.originalTrainAcc:
+                    keepGoing = False
+                    self.pop.popSet = lastGood_popSet[:]
+                else:
+                    lastGood_popSet = self.pop.popSet[:]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+            print("STAGE 2 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 3----------------------------------------------------------------------------------------------------------------------
+            retainedClassifiers = []
+            RefAccuracy = self.originalTrainAcc
+            for i in range(len(self.pop.popSet)):
+                heldClassifier = self.pop.popSet[0]
+                del self.pop.popSet[0]
+                newAccuracy = self.performanceEvaluation(True)  # Perform classifier set training accuracy evaluation
+
+                if newAccuracy < RefAccuracy:
+                    retainedClassifiers.append(heldClassifier)
+                    RefAccuracy = newAccuracy
+
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 3 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def Approach6(self):
+            """ This approach is based on Dixon's method. For each sample, form a match set and then a correct set. The most useful rule in
+            the correct set is moved into the final ruleset. In this approach, the most useful rule has the largest accuracy."""
+
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTrainAcc))
+            retainedClassifiers = []
+            self.matchSet = []
+            self.correctSet = []
+
+            cons.env.startEvaluationMode()
+            cons.env.resetDataRef(True)
+            for j in range(cons.env.formatData.numTrainInstances):
+                state_class = cons.env.getTrainInstance()
+                state = state_class[0]
+                classification = state_class[1]
+
+                # Create MatchSet
+                for i in range(len(self.pop.popSet)):
+                    cl = self.pop.popSet[i]
+                    if cl.match(state):
+                        self.matchSet.append(i)
+
+                # Create CorrectSet
+                for i in range(len(self.matchSet)):
+                    ref = self.matchSet[i]
+                    if self.pop.popSet[ref].classification == classification:
+                        self.correctSet.append(ref)
+
+                # Find the rule with highest accuracy
+                highestValue = 0
+                highestRef = 0
+                for i in range(len(self.correctSet)):
+                    ref = self.correctSet[i]
+                    product = self.pop.popSet[ref].getAccuracy()
+                    if product > highestValue:
+                        highestValue = product
+                        highestRef = ref
+
+                # If the rule is not already in the final ruleset, move it to the final ruleset
+                if highestValue == 0 or self.pop.popSet[highestRef] in retainedClassifiers:
+                    pass
+                else:
+                    retainedClassifiers.append(self.pop.popSet[highestRef])
+
+                    # Move to the next instance
+                cons.env.newInstance(True)
+                self.matchSet = []
+                self.correctSet = []
+
+            cons.env.stopEvaluationMode()
+
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def Approach7(self):
+            """ Supervise learning version of Dixon's approach. For each sample, form a match set and then a correct set. The most useful rule in
+            the correct set is moved into the final ruleset. In this case, the most useful rule has the largest product of accuracy and numerosity."""
+
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTrainAcc))
+
+            retainedClassifiers = []
+            self.matchSet = []
+            self.correctSet = []
+
+            cons.env.startEvaluationMode()
+            cons.env.resetDataRef(True)
+            for j in range(cons.env.formatData.numTrainInstances):
+                state_class = cons.env.getTrainInstance()
+                state = state_class[0]
+                classification = state_class[1]
+
+                # Create MatchSet
+                for i in range(len(self.pop.popSet)):
+                    cl = self.pop.popSet[i]
+                    if cl.match(state):
+                        self.matchSet.append(i)
+
+                # Create CorrectSet
+                for i in range(len(self.matchSet)):
+                    ref = self.matchSet[i]
+                    if self.pop.popSet[ref].classification == classification:
+                        self.correctSet.append(ref)
+
+                # Find the rule with highest accuracy, numerosity product
+                highestValue = 0
+                highestRef = 0
+                for i in range(len(self.correctSet)):
+                    ref = self.correctSet[i]
+                    product = self.pop.popSet[ref].getAccuracy() * self.pop.popSet[ref].numerosity
+                    if product > highestValue:
+                        highestValue = product
+                        highestRef = ref
+
+                # If the rule is not already in the final ruleset, move it to the final ruleset
+                if highestValue == 0 or self.pop.popSet[highestRef] in retainedClassifiers:
+                    pass
+                else:
+                    retainedClassifiers.append(self.pop.popSet[highestRef])
+
+                # Move to the next instance
+                cons.env.newInstance(True)
+                self.matchSet = []
+                self.correctSet = []
+
+            cons.env.stopEvaluationMode()
+
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def Approach10(self):
+            """A method introduced by Kharbat, 2008. Add the rule with the highest entropy to the final compact set. A rule's entropy is
+            Defined as (correct matched cases - wrong matched cases)/ number of cases."""
+
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTrainAcc))
+
+            # Find each rule's entropy
+            entropyList = [0.0 for v in range(len(self.pop.popSet))]
+            cons.env.startEvaluationMode()
+            for i in range(len(self.pop.popSet)):  # For the population of classifiers
+                cons.env.resetDataRef(True)
+                matchCount = 0
+                for j in range(cons.env.formatData.numTrainInstances):
+                    cl = self.pop.popSet[i]
+                    state = cons.env.getTrainInstance()[0]
+                    doesMatch = cl.match(state)
+                    if doesMatch:
+                        matchCount += 1.0
+                    cons.env.newInstance(True)
+                entropyList[i] = (matchCount - (
+                cons.env.formatData.numTrainInstances - matchCount)) / cons.env.formatData.numTrainInstances
+            cons.env.stopEvaluationMode()
+
+            # For each instance in the dataset
+            retainedClassifiers = []
+            self.matchSet = []
+            self.correctSet = []
+
+            cons.env.startEvaluationMode()
+            cons.env.resetDataRef(True)
+            for j in range(cons.env.formatData.numTrainInstances):
+                state_class = cons.env.getTrainInstance()
+                state = state_class[0]
+                classification = state_class[1]
+
+                # Create MatchSet
+                for i in range(len(self.pop.popSet)):
+                    cl = self.pop.popSet[i]
+                    if cl.match(state):
+                        self.matchSet.append(i)
+
+                # Create CorrectSet
+                for i in range(len(self.matchSet)):
+                    ref = self.matchSet[i]
+                    if self.pop.popSet[ref].classification == classification:
+                        self.correctSet.append(ref)
+
+                # Find member with highest entropy
+                highestValue = -1
+                highestRef = 0
+                for i in range(len(self.correctSet)):
+                    ref = self.correctSet[i]
+                    if entropyList[ref] > highestValue:
+                        highestValue = entropyList[ref]
+                        highestRef = ref
+
+                if highestValue == -1 or self.pop.popSet[highestRef] in retainedClassifiers:
+                    pass
+                else:
+                    retainedClassifiers.append(self.pop.popSet[highestRef])
+
+                # Move to the next instance
+                cons.env.newInstance(True)
+                self.matchSet = []
+                self.correctSet = []
+            cons.env.stopEvaluationMode()
+
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def Approach11(self):
+            """This approach contains two stages. The first stage is Quick Rule Compaction(QRC). The second stage uses match covering to rank rules(
+            Same as stage 3 in approach 1 and 2)."""
+
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTrainAcc))
+            print("Original Testing Accuracy = " + str(self.originalTestAcc))
+
+            # STAGE 1----------------------------------------------------------------------------------------------------------------------
+            retainedClassifiers = []
+            for i in range(len(self.pop.popSet)):
+                if self.pop.popSet[i].getAccuracy() <= 0.5 or (
+                        self.pop.popSet[i].correctCover == 1 and len(self.pop.popSet[i].specifiedAttList) > 1):
+                    pass
+                else:
+                    retainedClassifiers.append(self.pop.popSet[i])
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 2----------------------------------------------------------------------------------------------------------------------
+            finalClassifiers = []
+            completelyGeneralRuleRef = None
+            if len(self.pop.popSet) == 0:  # Stop Check
+                keepGoing = False
+            else:
+                keepGoing = True
+
+            # Make the match count list in preparation for stage 2-------------------------------------------------------------------------
+            matchCountList = [0.0 for v in range(len(self.pop.popSet))]
+            cons.env.startEvaluationMode()
+            for i in range(len(self.pop.popSet)):  # For the population of classifiers
+                cons.env.resetDataRef(True)
+                for j in range(cons.env.formatData.numTrainInstances):  # For each instance in training data
+                    cl = self.pop.popSet[i]
+                    state = cons.env.getTrainInstance()[0]
+                    doesMatch = cl.match(state)
+                    if doesMatch:
+                        matchCountList[i] += 1
+                    cons.env.newInstance(True)
+                if len(self.pop.popSet[i].condition) == 0:
+                    completelyGeneralRuleRef = i
+
+            cons.env.stopEvaluationMode()
+            if completelyGeneralRuleRef != None:  # gets rid of completely general rule.
+                del matchCountList[completelyGeneralRuleRef]
+                del self.pop.popSet[completelyGeneralRuleRef]
+
+            # ----------------------------------------------------------------------------------------------------------------------------
+            tempEnv = copy.deepcopy(cons.env)
+            trainingData = tempEnv.formatData.trainFormatted
+            while len(trainingData) > 0 and keepGoing:
+                bestRef = None
+                bestValue = None
+                for i in range(len(matchCountList)):
+                    if bestValue == None or bestValue < matchCountList[i]:
+                        bestRef = i
+                        bestValue = matchCountList[i]
+
+                if bestValue == 0.0 or len(self.pop.popSet) < 1:
+                    keepGoing = False
+                    continue
+
+                # Update Training Data----------------------------------------------------------------------------------------------------
+                newTrainSet = []
+                matchedData = 0
+                for w in range(len(trainingData)):
+                    cl = self.pop.popSet[bestRef]
+                    state = trainingData[w][0]
+                    doesMatch = cl.match(state)
+                    if doesMatch:
+                        matchedData += 1
+                    else:
+                        newTrainSet.append(trainingData[w])
+                if matchedData > 0:
+                    finalClassifiers.append(self.pop.popSet[
+                                                bestRef])  # Add best classifier to final list - only do this if there are any remaining matching data instances for this rule!
+                # Update classifier list and training set list
+                trainingData = newTrainSet
+                del self.pop.popSet[bestRef]
+                del matchCountList[bestRef]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+
+            self.pop.popSet = finalClassifiers
+            print("STAGE 2 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def Approach14(self):
+            """This approach contains two stages. The first stage use Quick Rule Compaction(QRC). The second stage uses fitness to rank the rules
+            and guide covering (same as the third stage in approach 2)."""
+
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTrainAcc))
+            print("Original Testing Accuracy = " + str(self.originalTestAcc))
+
+            # STAGE 1----------------------------------------------------------------------------------------------------------------------
+            retainedClassifiers = []
+            for i in range(len(self.pop.popSet)):
+                if self.pop.popSet[i].getAccuracy() <= 0.5 or (
+                        self.pop.popSet[i].correctCover == 1 and len(self.pop.popSet[i].specifiedAttList) > 1):
+                    pass
+                else:
+                    retainedClassifiers.append(self.pop.popSet[i])
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 2----------------------------------------------------------------------------------------------------------------------
+            finalClassifiers = []
+            completelyGeneralRuleRef = None
+            if len(self.pop.popSet) == 0:  # Stop check
+                keepGoing = False
+            else:
+                keepGoing = True
+
+            fitnessList = [0.0 for v in range(len(self.pop.popSet))]
+            for i in range(len(self.pop.popSet)):
+                fitnessList[i] = self.pop.popSet[i].fitness
+
+            for i in range(len(self.pop.popSet)):  # For the population of classifiers
+                if len(self.pop.popSet[i].condition) == 0:
+                    completelyGeneralRuleRef = i
+
+            if completelyGeneralRuleRef != None:  # gets rid of completely general rule.
+                del fitnessList[completelyGeneralRuleRef]
+                del self.pop.popSet[completelyGeneralRuleRef]
+            # ----------------------------------------------------------------------------------------------------------------------------
+            tempEnv = copy.deepcopy(cons.env)
+            trainingData = tempEnv.formatData.trainFormatted
+            while len(trainingData) > 0 and keepGoing:
+                bestRef = None
+                bestValue = None
+                for i in range(len(fitnessList)):
+                    if bestValue == None or bestValue < fitnessList[i]:
+                        bestRef = i
+                        bestValue = fitnessList[i]
+
+                if bestValue == 0.0 or len(self.pop.popSet) < 1:
+                    keepGoing = False
+                    continue
+
+                # Update Training Data----------------------------------------------------------------------------------------------------
+                newTrainSet = []
+                matchedData = 0
+                for w in range(len(trainingData)):
+                    cl = self.pop.popSet[bestRef]
+                    state = trainingData[w][0]
+                    doesMatch = cl.match(state)
+                    if doesMatch:
+                        matchedData += 1
+                    else:
+                        newTrainSet.append(trainingData[w])
+                if matchedData > 0:
+                    finalClassifiers.append(self.pop.popSet[
+                                                bestRef])  # Add best classifier to final list - only do this if there are any remaining matching data instances for this rule!
+                # Update classifier list and training set list
+                trainingData = newTrainSet
+                del self.pop.popSet[bestRef]
+                del fitnessList[bestRef]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+
+            self.pop.popSet = finalClassifiers
+            print("STAGE 2 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def Approach15(self):
+            """Only uses fitness to rank the rules and guide covering (same as the third stage in approach 2). Note that this is an old version of
+            QCRA. The code is not very efficient and leads to the slow performance. A quicker version is Approach 17. """
+
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTrainAcc))
+            print("Original Testing Accuracy = " + str(self.originalTestAcc))
+
+            # STAGE 1----------------------------------------------------------------------------------------------------------------------
+            finalClassifiers = []
+            completelyGeneralRuleRef = None
+            if len(self.pop.popSet) == 0:  # Stop check
+                keepGoing = False
+            else:
+                keepGoing = True
+
+            fitnessList = [0.0 for v in range(len(self.pop.popSet))]
+            for i in range(len(self.pop.popSet)):
+                fitnessList[i] = self.pop.popSet[i].fitness
+
+            for i in range(len(self.pop.popSet)):  # For the population of classifiers
+                if len(self.pop.popSet[i].condition) == 0:
+                    completelyGeneralRuleRef = i
+
+            if completelyGeneralRuleRef != None:  # gets rid of completely general rule.
+                del fitnessList[completelyGeneralRuleRef]
+                del self.pop.popSet[completelyGeneralRuleRef]
+            # ----------------------------------------------------------------------------------------------------------------------------
+            tempEnv = copy.deepcopy(cons.env)
+            trainingData = tempEnv.formatData.trainFormatted
+            while len(trainingData) > 0 and keepGoing:
+                bestRef = None
+                bestValue = None
+                for i in range(len(fitnessList)):
+                    if bestValue == None or bestValue < fitnessList[i]:
+                        bestRef = i
+                        bestValue = fitnessList[i]
+
+                if bestValue == 0.0 or len(self.pop.popSet) < 1:
+                    keepGoing = False
+                    continue
+
+                # Update Training Data----------------------------------------------------------------------------------------------------
+                newTrainSet = []
+                matchedData = 0
+                for w in range(len(trainingData)):
+                    cl = self.pop.popSet[bestRef]
+                    state = trainingData[w][0]
+                    doesMatch = cl.match(state)
+                    if doesMatch:
+                        matchedData += 1
+                    else:
+                        newTrainSet.append(trainingData[w])
+                if matchedData > 0:
+                    finalClassifiers.append(self.pop.popSet[
+                                                bestRef])  # Add best classifier to final list - only do this if there are any remaining matching data instances for this rule!
+                # Update classifier list and training set list
+                trainingData = newTrainSet
+                del self.pop.popSet[bestRef]
+                del fitnessList[bestRef]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+
+            self.pop.popSet = finalClassifiers
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def Approach16(self):
+            """This approach is a modified version of A15. It uses numerosity to rank rules and guide covering. """
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTrainAcc))
+            print("Original Testing Accuracy = " + str(self.originalTestAcc))
+
+            # STAGE 1----------------------------------------------------------------------------------------------------------------------
+            finalClassifiers = []
+            completelyGeneralRuleRef = None
+            if len(self.pop.popSet) == 0:  # Stop check
+                keepGoing = False
+            else:
+                keepGoing = True
+
+            numerosityList = [0.0 for v in range(len(self.pop.popSet))]
+            for i in range(len(self.pop.popSet)):
+                numerosityList[i] = self.pop.popSet[i].numerosity
+
+            for i in range(len(self.pop.popSet)):  # For the population of classifiers
+                if len(self.pop.popSet[i].condition) == 0:
+                    completelyGeneralRuleRef = i
+
+            if completelyGeneralRuleRef != None:  # gets rid of completely general rule.
+                del numerosityList[completelyGeneralRuleRef]
+                del self.pop.popSet[completelyGeneralRuleRef]
+            # ----------------------------------------------------------------------------------------------------------------------------
+            tempEnv = copy.deepcopy(cons.env)
+            trainingData = tempEnv.formatData.trainFormatted
+            while len(trainingData) > 0 and keepGoing:
+                bestRef = None
+                bestValue = None
+                for i in range(len(numerosityList)):
+                    if bestValue == None or bestValue < numerosityList[i]:
+                        bestRef = i
+                        bestValue = numerosityList[i]
+
+                if bestValue == 0.0 or len(self.pop.popSet) < 1:
+                    keepGoing = False
+                    continue
+
+                # Update Training Data----------------------------------------------------------------------------------------------------
+                newTrainSet = []
+                matchedData = 0
+                for w in range(len(trainingData)):
+                    cl = self.pop.popSet[bestRef]
+                    state = trainingData[w][0]
+                    doesMatch = cl.match(state)
+                    if doesMatch:
+                        matchedData += 1
+                    else:
+                        newTrainSet.append(trainingData[w])
+                if matchedData > 0:
+                    finalClassifiers.append(self.pop.popSet[
+                                                bestRef])  # Add best classifier to final list - only do this if there are any remaining matching data instances for this rule!
+                # Update classifier list and training set list
+                trainingData = newTrainSet
+                del self.pop.popSet[bestRef]
+                del numerosityList[bestRef]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+
+            self.pop.popSet = finalClassifiers
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def Approach18(self):
+            """A transitional version between Fu's approach and QCRA. The first two stages are the same as Fu's. The third stage uses fitness to
+            rank rules and guide covering. """
+
+            # Order Classifier Set---------------------------------------------------------------------------------------------------------
+            lastGood_popSet = sorted(self.pop.popSet, key=self.numerositySort)
+            self.pop.popSet = lastGood_popSet[:]
+            print("Starting number of classifiers = " + str(len(self.pop.popSet)))
+            print("Original Training Accuracy = " + str(self.originalTrainAcc))
+
+            # STAGE 1----------------------------------------------------------------------------------------------------------------------
+            keepGoing = True
+            while keepGoing:
+                del self.pop.popSet[0]  # Remove next classifier
+                newAccuracy = self.performanceEvaluation(True)  # Perform classifier set training accuracy evaluation
+                print(newAccuracy)  # DEBUG
+                if newAccuracy < self.originalTrainAcc:
+                    keepGoing = False
+                    self.pop.popSet = lastGood_popSet[:]
+                else:
+                    lastGood_popSet = self.pop.popSet[:]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+            print("STAGE 1 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 2----------------------------------------------------------------------------------------------------------------------
+            retainedClassifiers = []
+            RefAccuracy = self.originalTrainAcc
+            for i in range(len(self.pop.popSet)):
+                heldClassifier = self.pop.popSet[0]
+                del self.pop.popSet[0]
+                newAccuracy = self.performanceEvaluation(True)  # Perform classifier set training accuracy evaluation
+                print(newAccuracy)
+                if newAccuracy < RefAccuracy:
+                    retainedClassifiers.append(heldClassifier)
+                    RefAccuracy = newAccuracy
+
+            self.pop.popSet = retainedClassifiers
+            print("STAGE 2 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+            # STAGE 3----------------------------------------------------------------------------------------------------------------------
+            finalClassifiers = []
+            if len(self.pop.popSet) == 0:  # Stop check
+                keepGoing = False
+            else:
+                keepGoing = True
+
+            lastGood_popSet = sorted(self.pop.popSet, key=self.accuracySort, reverse=True)
+            self.pop.popSet = lastGood_popSet[:]
+
+            tempEnv = copy.deepcopy(cons.env)
+            trainingData = tempEnv.formatData.trainFormatted
+
+            while len(trainingData) > 0 and keepGoing:
+                newTrainSet = []
+                matchedData = 0
+                for w in range(len(trainingData)):
+                    cl = self.pop.popSet[0]
+                    state = trainingData[w][0]
+                    doesMatch = cl.match(state)
+                    if doesMatch:
+                        matchedData += 1
+                    else:
+                        newTrainSet.append(trainingData[w])
+                if matchedData > 0:
+                    finalClassifiers.append(self.pop.popSet[
+                                                0])  # Add best classifier to final list - only do this if there are any remaining matching data instances for this rule!
+                # Update classifier list and training set list
+                trainingData = newTrainSet
+                del self.pop.popSet[0]
+                if len(self.pop.popSet) == 0:
+                    keepGoing = False
+
+            self.pop.popSet = finalClassifiers
+            print("STAGE 3 Ended: Classifiers Remaining = " + str(len(self.pop.popSet)))
+
+        ############################################################################################################################################################################################
+        def performanceEvaluation(self, isTrain):
+            """ Performs Training or Testing Evaluation"""
+
+            cons.env.startEvaluationMode()
+            cons.env.resetDataRef(isTrain)
+            if isTrain:
+                myType = "TRAINING"
+            else:
+                myType = "VALIDATION"
+            noMatch = 0  # How often does the population fail to have a classifier that matches an instance in the data.
+            tie = 0  # How often can the algorithm not make a decision between classes due to a tie.
+            cons.env.resetDataRef(isTrain)  # Go to the first instance in dataset
+            phenotypeList = cons.env.formatData.phenotypeList
+            # ----------------------------------------------
+            classAccDict = {}
+            for each in phenotypeList:
+                classAccDict[each] = ClassAccuracy()
+            # ----------------------------------------------
+            if isTrain:
+                instances = cons.env.formatData.numTrainInstances
+            else:
+                instances = cons.env.formatData.numTestInstances
+            # ----------------------------------------------------------------------------------------------
+            for inst in range(instances):
+                if isTrain:
+                    state_phenotype = cons.env.getTrainInstance()
+                else:
+                    state_phenotype = cons.env.getTestInstance()
+                # -----------------------------------------------------------------------------
+                self.pop.makeEvalMatchSet(state_phenotype[0])
+                prediction = Prediction(self.pop)
+                phenotypeSelection = prediction.getDecision()
+                # -----------------------------------------------------------------------------
+
+                if phenotypeSelection == None:
+                    noMatch += 1
+                elif phenotypeSelection == 'Tie':
+                    tie += 1
+                else:  # Instances which failed to be covered are excluded from the accuracy calculation
+                    for each in phenotypeList:
+                        thisIsMe = False
+                        accuratePhenotype = False
+                        truePhenotype = state_phenotype[1]
+                        if each == truePhenotype:
+                            thisIsMe = True
+                        if phenotypeSelection == truePhenotype:
+                            accuratePhenotype = True
+                        classAccDict[each].updateAccuracy(thisIsMe, accuratePhenotype)
+
+                cons.env.newInstance(isTrain)  # next instance
+                self.pop.clearSets()
+                # ----------------------------------------------------------------------------------------------
+            # Calculate Standard Accuracy--------------------------------------------
+            instancesCorrectlyClassified = classAccDict[phenotypeList[0]].T_myClass + classAccDict[phenotypeList[0]].T_otherClass
+            instancesIncorrectlyClassified = classAccDict[phenotypeList[0]].F_myClass + classAccDict[phenotypeList[0]].F_otherClass
+            standardAccuracy = float(instancesCorrectlyClassified) / float(instancesCorrectlyClassified + instancesIncorrectlyClassified)
+
+            # Calculate Balanced Accuracy---------------------------------------------
+            T_mySum = 0
+            T_otherSum = 0
+            F_mySum = 0
+            F_otherSum = 0
+            for each in phenotypeList:
+                T_mySum += classAccDict[each].T_myClass
+                T_otherSum += classAccDict[each].T_otherClass
+                F_mySum += classAccDict[each].F_myClass
+                F_otherSum += classAccDict[each].F_otherClass
+            balancedAccuracy = ((0.5 * T_mySum / (float(T_mySum + F_otherSum)) + 0.5 * T_otherSum / (
+            float(T_otherSum + F_mySum))))  # BalancedAccuracy = (Specificity + Sensitivity)/2
+
+            # Adjustment for uncovered instances - to avoid positive or negative bias we incorporate the probability of guessing a phenotype by chance (e.g. 50% if two phenotypes)
+            predictionFail = float(noMatch) / float(instances)
+            predictionTies = float(tie) / float(instances)
+            instanceCoverage = 1.0 - predictionFail
+            predictionMade = 1.0 - (predictionFail + predictionTies)
+
+            adjustedStandardAccuracy = (standardAccuracy * predictionMade) + (
+            (1.0 - predictionMade) * (1.0 / float(len(phenotypeList))))
+            adjustedBalancedAccuracy = (balancedAccuracy * predictionMade) + (
+            (1.0 - predictionMade) * (1.0 / float(len(phenotypeList))))
+
+            # Adjusted Balanced Accuracy is calculated such that instances that did not match have a consistent probability of being correctly classified in the reported accuracy.
+
+            """
+            print("-----------------------------------------------")
+            print(str(myType) + " Accuracy Results for Model " + str(exp) + ":-------------")
+            print("Instance Coverage = " + str(instanceCoverage * 100.0) + '%')
+            print("Prediction Ties = " + str(predictionTies * 100.0) + '%')
+            print(str(instancesCorrectlyClassified) + ' out of ' + str(
+                instances) + ' instances covered and correctly classified.')
+            print("Standard Accuracy (Adjusted) = " + str(adjustedStandardAccuracy))
+            print("Balanced Accuracy (Adjusted) = " + str(adjustedBalancedAccuracy))
+            """
+
+            # Balanced and Standard Accuracies will only be the same when there are equal instances representative of each phenotype AND there is 100% covering.
+            cons.env.stopEvaluationMode()
+            return adjustedBalancedAccuracy
+
+        def numerositySort(self, cl):
+            """ Sorts from smallest numerosity to largest """
+            return cl.numerosity
+
+        def accuracySort(self, cl):
+            return cl.getAccuracy()
+
 
 ########################################################################################################################
 

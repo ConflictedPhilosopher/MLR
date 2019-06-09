@@ -1,0 +1,21 @@
+Performance Statistics:------------------------------------------------------------------------
+Training Coverage	Testing Coverage	Training Performance	Test Performance
+1.0	1.0	{'HammingLoss': 0.009889173060528538, 'Precision': 0.8312020460358056, 'Accuracy': 0.804134697357204, 'Recall': 0.8621057118499574, 'F-measure': 0.8329070758738275, 'oneError': 0.13682864450127877, 'rankLoss': 0.006830568732073526, 'micro-F': 0.8177766466419487, 'macro-F': 0.34608262498241904, 'AUC-score': 0.9395224451313577}	{'HammingLoss': 0.015532879818594096, 'Precision': 0.7227891156462586, 'Accuracy': 0.6972789115646256, 'Recall': 0.7568027210884354, 'F-measure': 0.726190476190476, 'oneError': 0.25, 'rankLoss': 0.07858022903110706, 'micro-F': 0.7068689534735519, 'macro-F': 0.22089050124895657, 'AUC-score': 0.5964500993375762}
+
+Population Characterization:------------------------------------------------------------------------
+MacroPopSize	MicroPopSize	Generality
+5003	5003	0.00
+
+SpecificitySum:------------------------------------------------------------------------
+-	/	0	00	04	0;	0cm	1	1-1/2	1-1/2-year	1-month	1-year	1-year-1-month	1-year-4-month	1-year-5-month	1/2	1/2/01	10	10-month	10-year	10-year-9-month	101	102
+
+AccuracySum:------------------------------------------------------------------------
+-	/	0	00	04	0;	0cm	1	1-1/2	1-1/2-year	1-month	1-year	1-year-1-month	1-year-4-month	1-year-5-month	1/2	1/2/01	10	10-month	10-year	10-year-9-month	101	102
+
+Run Time(in minutes):------------------------------------------------------------------------
+Global Time	0.0
+Matching Time	0.0
+Deletion Time	0.0
+Subsumption Time	0.0
+Selection Time	0.0
+Evaluation Time	0.0
