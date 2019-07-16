@@ -34,10 +34,10 @@ def MLRBC(arg):
     ######----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Supervised Learning Parameters - Generally just use default values.
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    nu = 2											# (v) Power parameter used to determine the importance of high accuracy when calculating fitness. (typically set to 5, recommended setting of 1 in noisy data)
+    nu = 10										# (v) Power parameter used to determine the importance of high accuracy when calculating fitness. (typically set to 5, recommended setting of 1 in noisy data)
     chi = 0.8										# (X) The probability of applying crossover in the GA. (typically set to 0.5-1.0)
     upsilon = 0.04									# (u) The probability of mutating an allele within an offspring.(typically set to 0.01-0.05)
-    theta_GA = 15									# The GA threshold; The GA is applied in a set when the average time since the last GA in the set is greater than theta_GA.
+    theta_GA = 50									# The GA threshold; The GA is applied in a set when the average time since the last GA in the set is greater than theta_GA.
     theta_del = 20									# The deletion experience threshold; The calculation of the deletion probability changes once this threshold is passed.
     theta_sub = 200									# The subsumption experience threshold;
     acc_sub = 0.99									# Subsumption accuracy requirement
@@ -415,11 +415,17 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # GENERATE MATCHING CONDITION
             # -------------------------------------------------------
-            while len(self.specifiedAttList) < 1:
-                for attRef in range(len(state)):
-                    if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
-                        self.specifiedAttList.append(attRef)
-                        self.condition.append(self.buildMatch(attRef, state))
+            # while len(self.specifiedAttList) < 1:
+            for attRef in range(len(state)):
+                if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
+                    self.specifiedAttList.append(attRef)
+                    self.condition.append(self.buildMatch(attRef, state))
+            if self.isOverGeneral():
+                zero = []
+                for i in range(len(phenotype)):
+                    zero.append('0')
+                zero = "".join(zero)
+                # self.phenotype = zero
 
         def classifierCopy(self, clOld, exploreIter):
             """  Constructs an identical Classifier.  However, the experience of the copy is set to 0 and the numerosity
