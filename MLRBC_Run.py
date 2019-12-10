@@ -359,8 +359,14 @@ class parallelRun():
                         data_valid.to_csv(validDataCSV)
                         convertCSV2TXT(os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + "-csv.csv"), completeTrainFileName)
                         convertCSV2TXT(os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + "-csv.csv"), completeValidFileName)
+
                 dataManage = DataManage(completeTrainFileName, completeValidFileName, self.classCount, self.dataInfo)
-                MLRBC.MLRBC([1, dataManage, self.majLP, self.minLP, self.Card, self.pi])
+                if REBOOT_MODEL:
+                    modelName = os.path.join(RUN_RESULT_PATH,
+                                             DATA_HEADER + "_MLRBC_RulePop_" + str(1) + ".txt")
+                    Pop = RebootModel.ClassifierSet(dataManage, modelName)
+                measures = MLRBC.MLRBC([1, dataManage, self.majLP, self.minLP, self.Card, self.pi, Pop])
+                print(measures)
 
     def meanPerformance(self, perfReports):
         total = sum(map(Counter, perfReports), Counter())
