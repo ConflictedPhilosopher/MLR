@@ -34,10 +34,10 @@ def MLRBC(arg):
     ######----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Supervised Learning Parameters - Generally just use default values.
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    nu = 40									# (v) Power parameter used to determine the importance of high accuracy when calculating fitness. (typically set to 5, recommended setting of 1 in noisy data)
+    nu = 10									# (v) Power parameter used to determine the importance of high accuracy when calculating fitness. (typically set to 5, recommended setting of 1 in noisy data)
     chi = 0.8										# (X) The probability of applying crossover in the GA. (typically set to 0.5-1.0)
     upsilon = 0.04									# (u) The probability of mutating an allele within an offspring.(typically set to 0.01-0.05)
-    theta_GA = 5									# The GA threshold; The GA is applied in a set when the average time since the last GA in the set is greater than theta_GA.
+    theta_GA = 50									# The GA threshold; The GA is applied in a set when the average time since the last GA in the set is greater than theta_GA.
     theta_del = 20									# The deletion experience threshold; The calculation of the deletion probability changes once this threshold is passed.
     theta_sub = 200									# The subsumption experience threshold;
     acc_sub = 0.99									# Subsumption accuracy requirement
@@ -45,11 +45,11 @@ def MLRBC(arg):
     delta = 0.1										# Deletion parameter; Used in determining deletion vote calculation.
     init_fit = 0.01									# The initial fitness for a new classifier. (typically very small, approaching but not equal to zero)
     fitnessReduction = 0.1							# Initial fitness reduction in GA offspring rules.
-    error = 0.05
+    error = 0.000001
     ######-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Algorithm Heuristic Options
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    doSubsumption = 1								# Activate Subsumption? (1 is True, 0 is False).  Subsumption is a heuristic that actively seeks to increase generalization in the rule population.
+    doSubsumption = 0								# Activate Subsumption? (1 is True, 0 is False).  Subsumption is a heuristic that actively seeks to increase generalization in the rule population.
     selectionMethod = 'tournament'		    		# Select GA parent selection strategy ('tournament' or 'roulette')
     theta_sel = 0.2									# The fraction of the correct set to be included in tournament selection.
 
@@ -420,12 +420,12 @@ def MLRBC(arg):
                 if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
                     self.specifiedAttList.append(attRef)
                     self.condition.append(self.buildMatch(attRef, state))
-            if self.isOverGeneral():
-                zero = []
-                for i in range(len(phenotype)):
-                    zero.append('0')
-                zero = "".join(zero)
-                self.phenotype = zero
+            # if self.isOverGeneral():
+            #     zero = []
+            #     for i in range(len(phenotype)):
+            #         zero.append('0')
+            #     zero = "".join(zero)
+            #     self.phenotype = zero
 
         def classifierCopy(self, clOld, exploreIter):
             """  Constructs an identical Classifier.  However, the experience of the copy is set to 0 and the numerosity
@@ -653,7 +653,9 @@ def MLRBC(arg):
                         # -------------------------------------------------------
                         # DISCRETE OR CONTINUOUS ATTRIBUTE - remove attribute specification with 50% chance if we have continuous attribute, or 100% if discrete attribute.
                         # -------------------------------------------------------
-                        if not attributeInfo[0] or random.random() > 0.5:
+                        # if not attributeInfo[0] or random.random() > 0.5:
+                        if not attributeInfo[0] or random.random() > cons.p_spec:
+
                             self.specifiedAttList.remove(attRef)
                             self.condition.pop(i)  # buildMatch handles both discrete and continuous attributes
                             changed = True
@@ -846,7 +848,7 @@ def MLRBC(arg):
                 Low = state[attRef] - rangeRadius
                 High = state[attRef] + rangeRadius
                 condList = [Low, High]  # ALKR Representation, Initialization centered around training instance  with a
-                                        # range between 25 and 75% of the domain size.
+                                        # range between 25% and 75% of the domain size.
             # -------------------------------------------------------
             # DISCRETE ATTRIBUTE
             # -------------------------------------------------------
@@ -1583,24 +1585,31 @@ def MLRBC(arg):
         # New method
         def runAttGeneralitySum(self, isEvaluationSummary):
             """ Determine the population-wide frequency of attribute specification, and accuracy weighted specification.  Used in complete rule population evaluations. """
+            self.attributeTracking = []
             if isEvaluationSummary:
                 self.attributeSpecList = []
                 self.attributeAccList = []
                 for i in range(cons.env.formatData.numAttributes):
                     self.attributeSpecList.append(0)
                     self.attributeAccList.append(0.0)
+                    self.attributeTracking.append(0)
                 for cl in self.popSet:
                     for ref in cl.specifiedAttList:  # for each attRef
+                        self.attributeTracking[ref] += 1
                         self.attributeSpecList[ref] += cl.numerosity
                         self.attributeAccList[ref] += cl.numerosity * cl.accuracy
+
+            # print(self.attributeTracking)
 
         def getPopTrack(self, Hloss, accuracy, exploreIter):
             """ Returns a formated output string to be printed to the Learn Track output file. """
             OverGenAcc = 0.0
             TN = 0.0
             TP = 0.0
-            trackString = str(exploreIter) + "\t" + str(len(self.popSet)) + "\t" + str(self.microPopSize) + "\t" + str(Hloss) + "\t" + str(accuracy) + "\t" + str("%.2f" % self.aveGenerality) + "\t" + str(
-                "%.2f" % cons.timer.returnGlobalTimer() + "\t" + str("%.3f" % TP) + "\t" + str("%.3f" % TN) + "\t" + str("%.3f" % OverGenAcc))  + "\n"
+            trackString = str(exploreIter) + "\t" + str(len(self.popSet)) + "\t" + str(self.microPopSize) + "\t" \
+                          + str(Hloss) + "\t" + str(accuracy) + "\t" + str("%.4f" % self.aveGenerality) \
+                          + "\t" + str("%.3f" % TP) + "\t" + str("%.3f" % TN) + "\t" + str("%.3f" % OverGenAcc) \
+                          + "\t" + str("%.2f" % cons.timer.returnGlobalTimer())  + "\n"
             """
             if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:  # discrete phenotype
                 print(("Epoch: " + str(int(exploreIter / trackingFrequency)) + "\t Iteration: " + str(
@@ -2076,8 +2085,6 @@ def MLRBC(arg):
                 OutputFileManager().writePopStats(cons.outFileName, trainEval, testEval, NO_TRAIN_ITERATION,
                                                   self.population, self.correct)
 
-
-
             # -------------------------------------------------------
             # NORMAL eLCS - Run eLCS from scratch on given data
             # -------------------------------------------------------
@@ -2118,8 +2125,8 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # MAJOR LEARNING LOOP
             # -------------------------------------------------------
-            while self.exploreIter < int(cons.learningIterations):
-                if (self.exploreIter % 10000) == 0:
+            while self.exploreIter < int(cons.learningIterations)+1:
+                if (self.exploreIter % cons.trackingFrequency) == 0:
                     print('Iteration: ', self.exploreIter)
 
                 # -------------------------------------------------------
@@ -2139,6 +2146,7 @@ def MLRBC(arg):
 
                 if (self.exploreIter % cons.trackingFrequency) == (cons.trackingFrequency - 1) and self.exploreIter > 0:
                     self.population.runPopAveEval(self.exploreIter)
+                    self.population.runAttGeneralitySum(True)
                     trackedAccuracy = sum(self.correct) / float(cons.trackingFrequency)  # Accuracy over the last "trackingFrequency" number of iterations.
                     trackedHloss = sum(self.hloss) / float(cons.trackingFrequency)
                     cons.env.startEvaluationMode()
@@ -2146,7 +2154,6 @@ def MLRBC(arg):
                     d = abs(testEval[1]['HammingLoss'] - loss_previous)
                     if d < cons.error:
                         cons.learningIterations = self.exploreIter
-                        print(d)
                     else:
                         loss_previous = testEval[1]['HammingLoss']
 
