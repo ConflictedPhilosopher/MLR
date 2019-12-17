@@ -1,10 +1,10 @@
 Performance Statistics:------------------------------------------------------------------------
 Training Coverage	Testing Coverage	Training Performance	Test Performance
-1.0	1.0	{'HammingLoss': 0.15993665874901095, 'Precision': 0.6024346793349169, 'Accuracy': 0.5573535233570864, 'Recall': 0.5762569279493271, 'F-measure': 0.5783650039588268, 'oneError': 0.42695961995249404, 'rankLoss': 0.17138262074425895, 'micro-F': 0.568264440601525, 'macro-F': 0.5718167645689513, 'AUC-score': 0.8481254807639802}	{'HammingLoss': 0.21300138312586445, 'Precision': 0.46473029045643155, 'Accuracy': 0.4230059935454127, 'Recall': 0.4385661595205164, 'F-measure': 0.44163208852005537, 'oneError': 0.5587828492392808, 'rankLoss': 0.25719225449515887, 'micro-F': 0.42930431137827546, 'macro-F': 0.43336558442445783, 'AUC-score': 0.745920106407485}
+1.0	1.0	{'HammingLoss': 0.1712193190815521, 'Precision': 0.5718527315914489, 'Accuracy': 0.5298891528107681, 'Recall': 0.5486935866983375, 'F-measure': 0.5502771179730785, 'oneError': 0.45605700712589076, 'rankLoss': 0.1881581551860637, 'micro-F': 0.5378806699869784, 'macro-F': 0.5429180015890109, 'AUC-score': 0.8278220682769133}	{'HammingLoss': 0.21184877823881976, 'Precision': 0.46887966804979253, 'Accuracy': 0.42438911940986634, 'Recall': 0.44133241124942374, 'F-measure': 0.4441678192715538, 'oneError': 0.5504840940525588, 'rankLoss': 0.2589557399723374, 'micro-F': 0.43273214378327346, 'macro-F': 0.43614867173053606, 'AUC-score': 0.7455492915498257}
 
 Population Characterization:------------------------------------------------------------------------
 MacroPopSize	MicroPopSize	Generality
-5667	5667	0.00
+4341	5667	0.00
 
 SpecificitySum:------------------------------------------------------------------------
 Att1	Att2	Att3	Att4	Att5	Att6	Att7	Att8	Att9	Att10	Att11	Att12	Att13	Att14	Att15	Att16	Att17

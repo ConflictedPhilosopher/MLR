@@ -1755,6 +1755,8 @@ def MLRBC(arg):
                         self.population.labelPowerSetList.append(cl.phenotype)
 
                     vote = cl.fitness * cl.numerosity
+                    # vote = cl.fitness
+                    # vote = cl.fitness * (cons.env.formatData.numAttributes - len(cl.specifiedAttList))/cons.env.formatData.numAttributes
                     it = 0
                     for l in cl.phenotype:
                         if (l == '1'):
@@ -2038,13 +2040,14 @@ def MLRBC(arg):
             # Global Parameters-------------------------------------------------------------------------------------
             self.population = None  # The rule population (the 'solution/model' evolved by eLCS)
             self.learnTrackOut = None  # Output file that will store tracking information during learning
-
             # -------------------------------------------------------
             # POPULATION REBOOT - Begin eLCS learning from an existing saved rule population
             # -------------------------------------------------------
             if cons.doPopulationReboot:
                 self.correct = [0.0 for i in range(cons.trackingFrequency)]
                 self.population = arg[-1]  # Population reboot
+                self.doPopAnalysis()
+
                 # self.population.runPopAveEval(self.exploreIter)
                 # self.population.runAttGeneralitySum(True)
                 cons.env.startEvaluationMode()  # Preserves learning position in training data
@@ -2490,6 +2493,8 @@ def MLRBC(arg):
             # print("-----------------------------------------------")
             # print(str(myType) + " Evaluation Results on model " + str(arg[0]) +  ":")
             resultList = [instanceCoverage, MLperformance]
+            # print(resultList[0], resultList[1])
+
             return resultList
 
         def doContPopEvaluation(self, isTrain):
@@ -2547,6 +2552,33 @@ def MLRBC(arg):
             # Balanced and Standard Accuracies will only be the same when there are equal instances representative of each phenotype AND there is 100% covering.
             resultList = [adjustedAccuracyEstimate, instanceCoverage]
             return resultList
+
+        def doPopAnalysis(self):
+            initialCount = len(self.population.popSet)
+            newPopSet = []
+            for cl in self.population.popSet:
+                if cl.matchCount > 1:
+                    newPopSet.append(cl)
+            newCount = len(newPopSet)
+            self.population.popSet = newPopSet
+
+            # dict = {}
+            # for cl in self.population.popSet:
+            #     if cl.phenotype in dict.keys():
+            #         acc = dict[cl.phenotype]
+            #         acc.append(cl.accuracy)
+            #         dict[cl.phenotype] = acc
+            #     else:
+            #         acc = []
+            #         acc.append(cl.accuracy)
+            #         dict[cl.phenotype] = acc
+            # info = {}
+            # for label in dict.keys():
+            #     maxx = max(dict[label])
+            #     meann = np.mean(dict[label])
+            #     minn = min(dict[label])
+            #     info[label] = [maxx, meann, minn]
+
 
 
     class OutputFileManager:
