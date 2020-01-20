@@ -10,6 +10,10 @@ import numpy as np
 from math import sqrt
 from sklearn.model_selection import train_test_split
 from collections import Counter
+from sklearn.cluster import SpectralClustering
+from sklearn.metrics.pairwise import cosine_similarity
+from scipy import sparse
+import networkx as nx
 
 from DataManagement import DataManage
 import MLRBC
@@ -268,7 +272,7 @@ class parallelRun():
 
             for it in range(NUMBER_OF_FOLDS):
                 argument = []
-                argument.append(it + 1)
+                argument.append(it+1)
                 completeTrainFileName = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + "-" + str(it + 1) + ".txt")
                 completeValidFileName = os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + "-" + str(it + 1) + ".txt")
                 trainDataCSV = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + "-" + str(it + 1) + "-csv.csv")
@@ -285,10 +289,10 @@ class parallelRun():
 
                 dataManage = DataManage(completeTrainFileName, completeValidFileName, self.classCount, self.dataInfo)
                 argument.append(dataManage)
-                argument.append(self.majLP)
-                argument.append(self.minLP)
                 argument.append(self.Card)
                 argument.append(self.pi)
+                argument.append(self.label_similarity)
+                argument.append(self.label_clusters)
                 if REBOOT_MODEL:
                     modelName = os.path.join(RUN_RESULT_PATH, DATA_HEADER + "_MLRBC_RulePop_" + str(it + 1) + ".txt")
                     Pop = RebootModel.ClassifierSet(dataManage, modelName)
@@ -322,12 +326,12 @@ class parallelRun():
                 dataManage = DataManage(completeTrainFileName, completeValidFileName, self.classCount, self.dataInfo)
                 for it in range(NO_EXPERIMENTS_AVERAGING):
                     argument = []
-                    argument.append(it + 1)
+                    argument.append(it)
                     argument.append(dataManage)
-                    argument.append(self.majLP)
-                    argument.append(self.minLP)
                     argument.append(self.Card)
                     argument.append(self.pi)
+                    argument.append(self.label_similarity)
+                    argument.append(self.label_clusters)
                     if REBOOT_MODEL:
                         modelName = os.path.join(RUN_RESULT_PATH,
                                                  DATA_HEADER + "_MLRBC_RulePop_" + str(it + 1) + ".txt")
@@ -361,14 +365,25 @@ class parallelRun():
                         convertCSV2TXT(os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + "-csv.csv"), completeValidFileName)
 
                 dataManage = DataManage(completeTrainFileName, completeValidFileName, self.classCount, self.dataInfo)
+                argument = []
+                argument.append(1)
+                argument.append(dataManage)
+                argument.append(self.Card)
+                argument.append(self.pi)
+                argument.append(self.label_similarity)
+                argument.append(self.label_clusters)
                 if REBOOT_MODEL:
                     modelName = os.path.join(RUN_RESULT_PATH,
                                              DATA_HEADER + "_MLRBC_RulePop_" + str(1) + ".txt")
                     Pop = RebootModel.ClassifierSet(dataManage, modelName)
-                measures = MLRBC.MLRBC([1, dataManage, self.majLP, self.minLP, self.Card, self.pi, Pop])
-                print(measures)
+                    argument.append(Pop)
+                measures = MLRBC.MLRBC(argument)
+                print([round(val, 4) for val in measures.values()])
 
     def meanPerformance(self, perfReports):
+        """
+        :param perfReports: multi-label performance measures for multiple experiments
+        """
         total = sum(map(Counter, perfReports), Counter())
         meanPerf = {key: val/len(perfReports) for key, val in total.items()}
         print("Average ML performance:\n")
@@ -381,10 +396,12 @@ class parallelRun():
         try:
             df = pd.read_csv(infilename)
             Class = []  # list of all targets
+            labels = []
             labelList = []
             classDict = {}
             for idx, row in df.iterrows():
                 label = [int(l) for l in row[NO_ATTRIBUTES:]]
+                labels.append(label)
                 newlabel = "".join(map(str, label))
                 Class.append(newlabel)
                 if newlabel in labelList:
@@ -444,8 +461,99 @@ class parallelRun():
 
             self.dataInfo = dict(zip(["card", "dens", "LP-IR", "MeanIR", "IRLbls", "CVIR"], [self.Card, dens, lpIR, meanIR, IRLbls, CVIR]))
             print("dataProp: " + str(self.dataInfo))
+
+            self.label_similarity = self.similarity(labels, 'cosine')
+            self.label_clusters = self.graph(labels, self.label_similarity)
+
+            """
+            by Xuyang: density-based label clustering method using global similarity goes here.
+            self.label_clusters = density_based(args...)
+            """
         except FileNotFoundError:
             print("completeData.csv not found.")
+
+    def similarity(self, label_matrix, measure):
+        """
+        :param labels: the complete set of labels
+        :param measure: similarity measure to be calculated. 'co-occur', 'hamming', 'cosine'
+        :return Sim: similarity based on hamming distance
+        :return cosine: cosine similarity
+        :return occurrence: Co-occurrence similarity
+        """
+
+        label_count = len(label_matrix[0])
+        sim_measure = np.zeros((label_count, label_count))
+
+        if measure == 'co-occur':
+            for i in range(label_count):
+                for j in range(label_count):
+                    first_label = [l[i] for l in label_matrix]
+                    second_label = [l[j] for l in label_matrix]
+                    sim_measure[i, j] = np.dot(first_label, second_label) / np.linalg.norm(second_label, 1)
+        else:
+            if measure == 'hamming':
+                for i in range(label_count):
+                    first_label = [l[i] for l in label_matrix]
+                    for j in range(i + 1, label_count):
+                        second_label = [l[j] for l in label_matrix]
+                        sim_measure[i, j] = np.sum(
+                            np.array([1 for (l1, l2) in zip(first_label, second_label) if l1 == l2])) / len(
+                            labels)
+                        sim_measure[j, i] = sim_measure[i, j]
+            elif measure == 'cosine':
+                label_matrix_sparse = sparse.csr_matrix(np.array(label_matrix).transpose())
+                sim_measure = cosine_similarity(label_matrix_sparse)
+        return sim_measure
+
+    def graph(self, labels, W):
+        """
+        :param labels:  the complete set of labels
+        :return:
+        """
+        labels = np.array(labels)
+        label_count = labels.shape[1]
+
+        G = nx.Graph()
+        D = np.diag(np.sum(W, axis=1))
+        L = D - W
+        # e, v = np.linalg.eig(L)
+
+        n_cluster = 2
+        sc = SpectralClustering(n_cluster, affinity='precomputed', n_init=100, assign_labels = 'kmeans',
+                                random_state=SEED_NUMBER)
+        sc.fit_predict(W)
+        label_clusters = {}
+        for n in range(int(n_cluster)):
+            label_clusters[n] = [node for node in range(label_count) if sc.labels_[node] == n]
+
+        edge_list = []
+        for c1 in range(label_count):
+            for c2 in range(c1+1, label_count):
+                edge_exists = np.dot(labels[:, c1], labels[:, c2]) > 0
+                if edge_exists:
+                    edge_list.append((c1, c2))
+                    w = W[c1, c2]
+                    G.add_weighted_edges_from([(c1, c2, w)])
+                else:
+                    G.add_node(c1)
+                    G.add_node(c2)
+
+        fig1, ax1 = plt.subplots()
+        ax1.set_title('Original data graph')
+        pos = nx.spring_layout(G)
+        for k in label_clusters.keys():
+            nx.draw_networkx_nodes(G, pos,
+                                   node_color=np.random.rand(3,),
+                                   nodelist=label_clusters[k],
+                                   )
+
+        lbls = dict(zip(np.arange(label_count), [str(l) for l in np.arange(label_count)]))
+        nx.draw_networkx_labels(G, pos, lbls, font_size=12)
+        nx.draw_networkx_edges(G, pos, edge_list=edge_list, width=1, alpha=0.5)
+        plt.savefig(DATA_HEADER + '_cosine_cluster')
+        # plt.show()
+
+        return label_clusters
 
     def tuneCard(self, inData):
         """
@@ -588,6 +696,7 @@ if __name__== "__main__":
 
     random.seed(SEED_NUMBER)
     parallel = parallelRun()
+    print('Training MLR model on ' + DATA_HEADER + ' dataset.')
 
     completeDataFileName = os.path.join(DATA_FOLDER, DATA_HEADER, DATA_HEADER + "-csv.csv")
     parallel.dataProp(completeDataFileName)

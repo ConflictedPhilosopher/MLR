@@ -4,6 +4,11 @@ import math
 import time
 import os.path
 from joblib import Parallel, delayed
+from sklearn.cluster import SpectralClustering
+from sklearn.metrics.pairwise import cosine_similarity
+from scipy import sparse
+import matplotlib.pyplot as plt
+import networkx as nx
 
 import numpy as np
 from sklearn.metrics import roc_curve, auc
@@ -16,8 +21,8 @@ def MLRBC(arg):
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     outFileName = DATA_HEADER							# Path/NewName for new algorithm output files. Note: Do not give a file extension, this is done automatically.
     learningIterations = str(NO_TRAIN_ITERATION)		# Specify complete algorithm evaluation checkpoints and maximum number of learning iterations (e.g. 1000.2000.5000 = A maximum of 5000 learning iterations with evaluations at 1000, 2000, and 5000 iterations)
-    N = POP_SIZE									    # Maximum size of the rule population (a.k.a. Micro-classifier population size, where N is the sum of the classifier numerosities in the population)
-    p_spec = 1 - P_HASH 									    # The probability of specifying an attribute when covering. (1-p_spec = the probability of adding '#' in ternary rule representations). Greater numbers of attributes in a dataset will require lower values of p_spec.
+    N = POP_SIZE[0]									    # Maximum size of the rule population (a.k.a. Micro-classifier population size, where N is the sum of the classifier numerosities in the population)
+    p_spec = 1 - P_HASH[0]									    # The probability of specifying an attribute when covering. (1-p_spec = the probability of adding '#' in ternary rule representations). Greater numbers of attributes in a dataset will require lower values of p_spec.
     exp = arg[0]
     random.seed(exp)
 
@@ -34,10 +39,10 @@ def MLRBC(arg):
     ######----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Supervised Learning Parameters - Generally just use default values.
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    nu = 10									# (v) Power parameter used to determine the importance of high accuracy when calculating fitness. (typically set to 5, recommended setting of 1 in noisy data)
+    nu = NU[0]									# (v) Power parameter used to determine the importance of high accuracy when calculating fitness. (typically set to 5, recommended setting of 1 in noisy data)
     chi = 0.8										# (X) The probability of applying crossover in the GA. (typically set to 0.5-1.0)
     upsilon = 0.04									# (u) The probability of mutating an allele within an offspring.(typically set to 0.01-0.05)
-    theta_GA = 50									# The GA threshold; The GA is applied in a set when the average time since the last GA in the set is greater than theta_GA.
+    theta_GA = THETA_GA[0]									# The GA threshold; The GA is applied in a set when the average time since the last GA in the set is greater than theta_GA.
     theta_del = 20									# The deletion experience threshold; The calculation of the deletion probability changes once this threshold is passed.
     theta_sub = 200									# The subsumption experience threshold;
     acc_sub = 0.99									# Subsumption accuracy requirement
@@ -71,6 +76,9 @@ def MLRBC(arg):
             self.startRefMatching = 0.0
             self.globalMatching = 0.0
 
+            self.startRefBreakdown = 0.0
+            self.globalBreakdown = 0.0
+
             # Deletion Time Variables
             self.startRefDeletion = 0.0
             self.globalDeletion = 0.0
@@ -89,6 +97,15 @@ def MLRBC(arg):
 
 
             # ************************************************************
+
+        def startTimeBreakdown(self):
+            """ Tracks MatchSet Time """
+            self.startRefBreakdown = time.time()
+
+        def stopTimeBreakdown(self):
+            """ Tracks MatchSet Time """
+            diff = time.time() - self.startRefBreakdown
+            self.globalBreakdown += diff
 
         def startTimeMatching(self):
             """ Tracks MatchSet Time """
@@ -174,6 +191,10 @@ def MLRBC(arg):
 
             tempLine = fileObject.readline()
             tempList = tempLine.strip().split('\t')
+            self.globalBreakdown = float(tempList[1]) * 60
+
+            tempLine = fileObject.readline()
+            tempList = tempLine.strip().split('\t')
             self.globalDeletion = float(tempList[1]) * 60
 
             tempLine = fileObject.readline()
@@ -196,6 +217,7 @@ def MLRBC(arg):
             """ Reports the time summaries for this run. Returns a string ready to be printed out."""
             outputTime = "Global Time\t" + str(self.globalTime / 60.0) + \
                          "\nMatching Time\t" + str(self.globalMatching / 60.0) + \
+                         "\nBreakdown Time\t" + str(self.globalBreakdown / 60.0) + \
                          "\nDeletion Time\t" + str(self.globalDeletion / 60.0) + \
                          "\nSubsumption Time\t" + str(self.globalSubsumption / 60.0) + \
                          "\nSelection Time\t" + str(self.globalSelection / 60.0) + \
@@ -216,8 +238,8 @@ def MLRBC(arg):
             self.learningIterations = learningIterations  # par['learningIterations']                     #Saved as text
             self.N = N  # int(par['N'])                                                  #Saved as integer
             self.p_spec = p_spec  # float(par['p_spec'])                                      #Saved as float
-            self.majLP = arg[2]
-            self.minLP = arg[3]
+            # self.majLP = arg[2]
+            # self.minLP = arg[3]
             self.error = error
 
             # Logistical Run Parameters ------------------------------------------------------------------------------------
@@ -370,13 +392,13 @@ def MLRBC(arg):
 
             # Classifier Accuracy Tracking -------------------------------------
             self.matchCount = 0  # Known in many LCS implementations as experience, i.e. the total number of times this classifier was in a match set
-            self.experience = {}
+            # self.experience = {}
             self.correctCount = 0  # The total number of times this classifier was in a correct set
             self.loss = 0
-            self.precision = 0
-            self.recall = 0
-            self.f1 = 0
-            self.acc = 0
+            # self.precision = 0
+            # self.recall = 0
+            # self.f1 = 0
+            # self.acc = 0
 
             if isinstance(c, list):
                 self.classifierCovering(a, b, c, d)
@@ -401,17 +423,17 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # DISCRETE PHENOTYPE
             # -------------------------------------------------------
-            if dataInfo.discretePhenotype or dataInfo.MLphenotype:
-                self.phenotype = phenotype
+            # if dataInfo.discretePhenotype or dataInfo.MLphenotype:
+            self.phenotype = phenotype
             # -------------------------------------------------------
             # CONTINUOUS PHENOTYPE
             # -------------------------------------------------------
-            else:
-                phenotypeRange = dataInfo.phenotypeList[1] - dataInfo.phenotypeList[0]
-                rangeRadius = random.randint(25, 75) * 0.01 * phenotypeRange / 2.0  # Continuous initialization domain radius.
-                Low = float(phenotype) - rangeRadius
-                High = float(phenotype) + rangeRadius
-                self.phenotype = [Low, High]  # ALKR Representation, Initialization centered around training instance  with a range between 25 and 75% of the domain size.
+            # else:
+            #     phenotypeRange = dataInfo.phenotypeList[1] - dataInfo.phenotypeList[0]
+            #     rangeRadius = random.randint(25, 75) * 0.01 * phenotypeRange / 2.0  # Continuous initialization domain radius.
+            #     Low = float(phenotype) - rangeRadius
+            #     High = float(phenotype) + rangeRadius
+            #     self.phenotype = [Low, High]  # ALKR Representation, Initialization centered around training instance  with a range between 25 and 75% of the domain size.
             # -------------------------------------------------------
             # GENERATE MATCHING CONDITION
             # -------------------------------------------------------
@@ -688,14 +710,14 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # MUTATE PHENOTYPE
             # -------------------------------------------------------
-            if cons.env.formatData.discretePhenotype:
-                nowChanged = self.discretePhenotypeMutation()
-            elif cons.env.formatData.MLphenotype:
+            # if cons.env.formatData.discretePhenotype:
+            #     nowChanged = self.discretePhenotypeMutation()
+            # elif cons.env.formatData.MLphenotype:
+            nowChanged = self.MLphenotypeMutation(phenotype)
+            while (Acc.countLabel(self.phenotype) == 0):
                 nowChanged = self.MLphenotypeMutation(phenotype)
-                while (Acc.countLabel(self.phenotype) == 0):
-                    nowChanged = self.MLphenotypeMutation(phenotype)
-            else:
-                nowChanged = self.continuousPhenotypeMutation(phenotype)
+            # else:
+            #     nowChanged = self.continuousPhenotypeMutation(phenotype)
 
             if changed or nowChanged:
                 return True
@@ -882,18 +904,18 @@ def MLRBC(arg):
 
 
         def updateFitness(self, matchSetNumAcc):
-            if cons.env.formatData.MLphenotype:
-                if self.matchCount < 1.0 / cons.beta:
-                    self.fitness = pow(self.accuracy, cons.nu)
-                else:
-                    self.fitness = pow(self.accuracy, cons.nu)
+            # if cons.env.formatData.MLphenotype:
+            if self.matchCount < 1.0 / cons.beta:
+                self.fitness = pow(self.accuracy, cons.nu)
+            else:
+                self.fitness = pow(self.accuracy, cons.nu)
                     # k = self.accuracy * self.numerosity /(matchSetNumAcc)
                     # self.fitness = self.fitness + cons.beta * (k - self.fitness)
-            else:
-                if (self.phenotype[1] - self.phenotype[0]) >= cons.env.formatData.phenotypeRange:
-                    self.fitness = 0.0
-                else:
-                    self.fitness = math.fabs(pow(self.accuracy, cons.nu) - (self.phenotype[1] - self.phenotype[0]) / cons.env.formatData.phenotypeRange)
+            # else:
+            #     if (self.phenotype[1] - self.phenotype[0]) >= cons.env.formatData.phenotypeRange:
+            #         self.fitness = 0.0
+            #     else:
+            #         self.fitness = math.fabs(pow(self.accuracy, cons.nu) - (self.phenotype[1] - self.phenotype[0]) / cons.env.formatData.phenotypeRange)
 
         def updateMatchSetSize(self, matchSetSize):
             """  Updates the average match set size. """
@@ -904,10 +926,10 @@ def MLRBC(arg):
 
         def updateExperience(self, TruePhenotype):
             """ Increases the experience of the classifier by one. Once an epoch has completed, rule accuracy can't change."""
-            if TruePhenotype in self.experience.keys():
-                self.experience[TruePhenotype] += 1
-            else:
-                self.experience[TruePhenotype] = 1
+            # if TruePhenotype in self.experience.keys():
+            #     self.experience[TruePhenotype] += 1
+            # else:
+            #     self.experience[TruePhenotype] = 1
             self.matchCount += 1
 
         def updateCorrect(self):
@@ -925,9 +947,9 @@ def MLRBC(arg):
 
             Acc = ClassAccuracy()
             Acc.multiLablePerformace(self.phenotype, TruePhenotype, combVote)
-            self.precision += Acc.getPrecisionSingle()
-            self.recall += Acc.getRecallSingle()
-            self.f1 += Acc.getFmeasureSingle()
+            # self.precision += Acc.getPrecisionSingle()
+            # self.recall += Acc.getRecallSingle()
+            # self.f1 += Acc.getFmeasureSingle()
             self.loss += Acc.getLossSingle()
             self.acc += Acc.getAccuracySingle()
 
@@ -1020,15 +1042,15 @@ def MLRBC(arg):
 
             # Evaluation Parameters-------------------------------
             self.aveGenerality = 0.0
-            self.expRules = 0.0
+            # self.expRules = 0.0
             self.attributeSpecList = []
             self.attributeAccList = []
-            self.avePhenotypeRange = 0.0
+            # self.avePhenotypeRange = 0.0
             self.theta_GA = cons.theta_GA
             self.aveNumerosity = 0.0
-            self.majLP = cons.majLP   # majority Label Powerset
-            self.minLP = cons.minLP   # minority Label Powerset
-            self.genAveAcc = 0  # Average accuracy of the over-general classifiers
+            # self.majLP = cons.majLP   # majority Label Powerset
+            # self.minLP = cons.minLP   # minority Label Powerset
+            # self.genAveAcc = 0  # Average accuracy of the over-general classifiers
 
             # Set Constructors-------------------------------------
             if a == None:
@@ -1088,8 +1110,8 @@ def MLRBC(arg):
             doCovering = True  # Covering check: Twofold (1)checks that a match is present, and (2) that at least one match dictates the correct phenotype.
             setNumerositySum = 0  # new
             k = 2
-            overGenCount = 0
-            overGenAccSum = 0
+            # overGenCount = 0
+            # overGenAccSum = 0
 
             # -------------------------------------------------------
             # MATCHING
@@ -1162,28 +1184,167 @@ def MLRBC(arg):
                 self.matchSet.append(len(self.popSet) - 1)  # Add covered classifier to matchset
                 doCovering = False
 
+            cons.timer.startTimeBreakdown()
+            if exploreIter > cons.env.formatData.numTrainInstances:
+            #     self.labelSetBreakDown(setNumerositySum, exploreIter, state)
+                self.labelGraphPartition(setNumerositySum, exploreIter, state)
+            cons.timer.stopTimeBreakdown()
+
+        def labelGraphPartition(self, setNumerositySum, exploreIter, state):
+            candidate_index = random.sample(self.matchSet, 1)[0]
+            candidate_cl = self.popSet[candidate_index]
+            # if len(candidate_cl.phenotype) > 2:
+            if self.countLabel(candidate_cl.phenotype) > 2:
+                if CLUSTERING_MODE == 'local':
+                    label_matrix = []
+                    # matchsetLabels = set([])
+                    for m in self.matchSet:
+                        cl = self.popSet[m]
+                        label = [int(l) for l in cl.phenotype.strip()]
+                        label_matrix.append(label)
+                        # matchsetLabels = set(cl.phenotype).union(matchsetLabels)
+                        # label = [0] * cons.env.formatData.ClassCount
+                        # for l in cl.phenotype:
+                        #     label[l] = 1
+                        # label_matrix.append(label)
+                    label_matrix = np.array(label_matrix)
+                    temp = np.sum(label_matrix, axis=0)
+                    matchsetLabels = [l for l in range(cons.env.formatData.ClassCount) if temp[l] != 0]
+                    label_matrix_M = label_matrix[:, matchsetLabels]
+                    label_similarity = self.similarity(label_matrix_M, 'cosine')
+                    label_clusters = self.graph(matchsetLabels, label_similarity)
+                    """
+                    by Xuyang: Density-based clustering method using local similarity goes here.
+                    :param matchsetLabels: reference to the set of labels predicted by the rules in [M]
+                    :param label_matrix: binary representation of the labels predicted by the rules in [M]
+                                         to calculate similarity matrix.
+                    label_clusters = density_based(args....)
+                    """
+                elif CLUSTERING_MODE == 'global':
+                    label_clusters = arg[5]
+                else:
+                    print('Label clustering mode not recognized!')
+                    return
+
+                newCl1 = None
+                newCl2 = None
+                # cluster0 = [l for l in candidate_cl.phenotype if l in label_clusters[0]]
+                # cluster1 = [l for l in candidate_cl.phenotype if l not in cluster0]
+                empty_label = cons.env.formatData.ClassCount*['0']
+                candidate_phenotype0 = list(copy.deepcopy(candidate_cl.phenotype).strip())
+                candidate_phenotype1 = list(copy.deepcopy(candidate_cl.phenotype).strip())
+                for l in label_clusters[0]:
+                    candidate_phenotype0[l] = '0'
+                for l in label_clusters[1]:
+                    candidate_phenotype1[l] = '0'
+
+                if (candidate_phenotype0 != empty_label) and (candidate_phenotype1 != empty_label):
+                    newCl1 = Classifier(setNumerositySum + 1, exploreIter, state, candidate_cl.phenotype)
+                    newCl1.phenotype = ''.join(candidate_phenotype0)
+                    newCl1.specifiedAttList = candidate_cl.specifiedAttList
+                    newCl1.condition = candidate_cl.condition
+
+                    newCl2 = Classifier(setNumerositySum + 1, exploreIter, state, candidate_cl.phenotype)
+                    newCl2.phenotype = ''.join(candidate_phenotype1)
+                    newCl2.specifiedAttList = candidate_cl.specifiedAttList
+                    newCl2.condition = candidate_cl.condition
+
+                    candidate_cl.updateNumerosity(-1)
+                    self.microPopSize -= 1
+                    if candidate_cl.numerosity < 1:
+                        self.removeMacroClassifier(candidate_index)
+                        self.deleteFromMatchSet(candidate_index)
+
+                    if newCl1 is not None:
+                        self.addClassifierToPopulation(newCl1, False, True)
+                        self.matchSet.append(len(self.popSet) - 1)
+
+                    if newCl2 is not None:
+                        self.addClassifierToPopulation(newCl2, False, True)
+                        self.matchSet.append(len(self.popSet) - 1)
+            else:
+                return
+
+        def graph(self, matchsetLabels, W):
+            """
+            :param labels:  the complete set of labels
+            :return label_clusters
+            """
+            D = np.diag(np.sum(W, axis=1))
+            L = D - W
+            # e, v = np.linalg.eig(L)
+            n_cluster = 2
+            sc = SpectralClustering(n_cluster, affinity='precomputed', n_init=100, assign_labels='kmeans')
+            sc.fit_predict(W)
+            label_clusters = {}
+            for n in range(int(n_cluster)):
+                label_clusters[n] = [matchsetLabels[node] for node in range(len(matchsetLabels)) if
+                                     sc.labels_[node] == n]
+            return label_clusters
+
+        def similarity(self, label_matrix, measure):
+            """
+            :param labels: the complete set of labels
+            :param measure: similarity measure to be calculated. 'co-occur', 'hamming', 'cosine'
+            :param
+            :return Sim: similarity based on hamming distance
+            :return cosine: cosine similarity
+            :return occurrence: Co-occurrence similarity
+            """
+            label_count = cons.env.formatData.ClassCount
+            sim_measure = np.zeros((label_count, label_count))
+
+            if measure == 'co-occur':
+                for i in range(label_count):
+                    for j in range(label_count):
+                        first_label = [l[i] for l in label_matrix]
+                        second_label = [l[j] for l in label_matrix]
+                        sim_measure[i, j] = np.dot(first_label, second_label) / np.linalg.norm(second_label, 1)
+            else:
+                if measure == 'hamming':
+                    for i in range(label_count):
+                        first_label = [l[i] for l in label_matrix]
+                        for j in range(i + 1, label_count):
+                            second_label = [l[j] for l in label_matrix]
+                            sim_measure[i, j] = np.sum(
+                                np.array([1 for (l1, l2) in zip(first_label, second_label) if l1 == l2]))\
+                                                / len(label_matrix)
+                            sim_measure[j, i] = sim_measure[i, j]
+                elif measure == 'cosine':
+                    label_matrix_sparse = sparse.csr_matrix(np.array(label_matrix).transpose())
+                    sim_measure = cosine_similarity(label_matrix_sparse)
+            return sim_measure
+
+        def countLabel(self, phenotype):
+            count = 0
+            for L in phenotype:
+                if float(L) != 0:
+                    count += 1
+            return count
+
         def makeCorrectSet(self, phenotype):
             phenotype_int = int(phenotype, 2)
-            if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
+            # if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
                 # -------------------------------------------------------
                 # DISCRETE AND MULTI-LABEL PHENOTYPE
                 # -------------------------------------------------------
-                for i in range(len(self.matchSet)):
-                    ref = self.matchSet[i]
-                    prediction_int = int(self.popSet[ref].phenotype, 2)
-                    if prediction_int == phenotype_int:
-                        self.correctSet.append(ref)
+            for i in range(len(self.matchSet)):
+                ref = self.matchSet[i]
+                prediction_int = int(self.popSet[ref].phenotype, 2)
+                # if self.isPhenotypeSubset(ref, phenotype):
+                if prediction_int == phenotype_int:
+                    self.correctSet.append(ref)
                     #elif cons.env.formatData.MLphenotype:
-                        #if self.isPhenotypeSubset(ref, phenotype):
+
                             #self.correctSet.append(ref)
                     # -------------------------------------------------------
                     # CONTINUOUS PHENOTYPE
                     # -------------------------------------------------------
-            else:
-                for i in range(len(self.matchSet)):
-                    ref = self.matchSet[i]
-                    if float(phenotype) <= float(self.popSet[ref].phenotype[1]) and float(phenotype) >= float(self.popSet[ref].phenotype[0]):
-                        self.correctSet.append(ref)
+            # else:
+            #     for i in range(len(self.matchSet)):
+            #         ref = self.matchSet[i]
+            #         if float(phenotype) <= float(self.popSet[ref].phenotype[1]) and float(phenotype) >= float(self.popSet[ref].phenotype[0]):
+            #             self.correctSet.append(ref)
 
         def isPhenotypeSubset(self, ref, phenotype):
             isSusbet = True
@@ -1424,8 +1585,7 @@ def MLRBC(arg):
                 self.microPopSize += 1
                 return
 
-            self.addClassifierToPopulation(cl,
-                                           False)  # If no subsumer was found, check for identical classifier, if not then add the classifier to the population
+            self.addClassifierToPopulation(cl, False)  # If no subsumer was found, check for identical classifier, if not then add the classifier to the population
 
         def doCorrectSetSubsumption(self):
             """ Executes correct set subsumption.  The correct set subsumption looks for the most general subsumer classifier in the correct set
@@ -1452,11 +1612,11 @@ def MLRBC(arg):
         # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         # OTHER KEY METHODS
         # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-        def addClassifierToPopulation(self, cl, covering):
+        def addClassifierToPopulation(self, cl, covering, searchInM=False):
             """ Note new change here: Adds a classifier to the set and increases the microPopSize value accordingly."""
             oldCl = None
             if not covering:
-                oldCl = self.getIdenticalClassifier(cl)
+                oldCl = self.getIdenticalClassifier(cl, searchInM)
             if oldCl != None:  # found identical classifier
                 oldCl.updateNumerosity(1)
                 self.microPopSize += 1
@@ -1505,7 +1665,7 @@ def MLRBC(arg):
                 if ref in self.correctSet:
                     self.popSet[ref].updateCorrect()
                 self.popSet[ref].updateLoss(state_phenotype_conf[1])
-                # self.popSet[ref].updateMLperformance(state_phenotype_conf[1], None)  # New
+                self.popSet[ref].updateLoss(state_phenotype_conf[1])  # New
                 self.popSet[ref].updateAccuracy()
                 self.popSet[ref].updateFitness(matchSetNumAcc)
                 # matchSetNumAcc += self.popSet[ref].numerosity * self.popSet[ref].accuracy
@@ -1547,11 +1707,17 @@ def MLRBC(arg):
                 sumCl += cl.fitness * cl.numerosity
             return sumCl
 
-        def getIdenticalClassifier(self, newCl):
+        def getIdenticalClassifier(self, newCl, searchInM=False):
             """ Looks for an identical classifier in the population. """
-            for cl in self.popSet:
-                if newCl.equals(cl):
-                    return cl
+            if not searchInM:
+                for cl in self.popSet:
+                    if newCl.equals(cl):
+                        return cl
+            else:
+                for m in self.matchSet:
+                    cl = self.popSet[m]
+                    if newCl.equals(cl):
+                        return cl
             return None
 
         def clearSets(self):
@@ -1714,27 +1880,27 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # CONTINUOUS PHENOTYPES
             # -------------------------------------------------------
-            else:
-                if len(population.matchSet) < 1:
-                    print("empty matchSet")
-                    self.decision = None
-                else:
-                    # IDEA - outputs a single continuous prediction value(closeness to this prediction accuracy will dictate accuracy). In determining this value we examine all ranges
-                    phenotypeRange = cons.env.formatData.phenotypeList[1] - cons.env.formatData.phenotypeList[0]  # Difference between max and min phenotype values observed in data.
-                    predictionValue = 0
-                    valueWeightSum = 0
-                    for ref in population.matchSet:
-                        cl = population.popSet[ref]
-                        localRange = cl.phenotype[1] - cl.phenotype[0]
-                        valueWeight = (phenotypeRange / float(localRange))
-                        localAverage = cl.phenotype[1] + cl.phenotype[0] / 2.0
-
-                        valueWeightSum += valueWeight
-                        predictionValue += valueWeight * localAverage
-                    if valueWeightSum == 0.0:
-                        self.decision = None
-                    else:
-                        self.decision = predictionValue / float(valueWeightSum)
+            # else:
+            #     if len(population.matchSet) < 1:
+            #         print("empty matchSet")
+            #         self.decision = None
+            #     else:
+            #         # IDEA - outputs a single continuous prediction value(closeness to this prediction accuracy will dictate accuracy). In determining this value we examine all ranges
+            #         phenotypeRange = cons.env.formatData.phenotypeList[1] - cons.env.formatData.phenotypeList[0]  # Difference between max and min phenotype values observed in data.
+            #         predictionValue = 0
+            #         valueWeightSum = 0
+            #         for ref in population.matchSet:
+            #             cl = population.popSet[ref]
+            #             localRange = cl.phenotype[1] - cl.phenotype[0]
+            #             valueWeight = (phenotypeRange / float(localRange))
+            #             localAverage = cl.phenotype[1] + cl.phenotype[0] / 2.0
+            #
+            #             valueWeightSum += valueWeight
+            #             predictionValue += valueWeight * localAverage
+            #         if valueWeightSum == 0.0:
+            #             self.decision = None
+            #         else:
+            #             self.decision = predictionValue / float(valueWeightSum)
 
         def combinePredictions(self):
 
@@ -2272,9 +2438,9 @@ def MLRBC(arg):
                 # DISCRETE PHENOTYPE PREDICTION
                 # -------------------------------------------------------
                 if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
-                    target = state_phenotype_conf[1]
-                    tp = 0
-                    tn = 0
+                    # target = state_phenotype_conf[1]
+                    # tp = 0
+                    # tn = 0
                     """
                     for it in range(cons.env.formatData.ClassCount):
                         tp += int(target[it]) and int(phenotypePrediction[it])
@@ -2497,62 +2663,6 @@ def MLRBC(arg):
 
             return resultList
 
-        def doContPopEvaluation(self, isTrain):
-            """ Performs evaluation of population via the copied environment. Specifically developed for continuous phenotype evaulation.
-            The population is maintained unchanging throughout the evaluation.  Works on both training and testing data. """
-            if isTrain:
-                myType = "TRAINING"
-            else:
-                myType = "TESTING"
-            noMatch = 0  # How often does the population fail to have a classifier that matches an instance in the data.
-            cons.env.resetDataRef(isTrain)  # Go to first instance in data set
-            accuracyEstimateSum = 0
-
-            if isTrain:
-                instances = cons.env.formatData.numTrainInstances
-            else:
-                instances = cons.env.formatData.numTestInstances
-            # ----------------------------------------------------------------------------------------------
-            for inst in range(instances):
-                if isTrain:
-                    state_phenotype = cons.env.getTrainInstance()
-                else:
-                    state_phenotype = cons.env.getTestInstance()
-                # -----------------------------------------------------------------------------
-                self.population.makeEvalMatchSet(state_phenotype[0])
-                prediction = Prediction(self.population)
-                phenotypePrediction = prediction.getDecision()
-                # -----------------------------------------------------------------------------
-                if phenotypePrediction == None:
-                    noMatch += 1
-                else:  # Instances which failed to be covered are excluded from the initial accuracy calculation
-                    predictionError = math.fabs(float(phenotypePrediction) - float(state_phenotype[1]))
-                    phenotypeRange = cons.env.formatData.phenotypeList[1] - cons.env.formatData.phenotypeList[0]
-                    accuracyEstimateSum += 1.0 - (predictionError / float(phenotypeRange))
-
-                cons.env.newInstance(isTrain)  # next instance
-                self.population.clearSets()
-                # ----------------------------------------------------------------------------------------------
-            # Accuracy Estimate
-            if instances == noMatch:
-                accuracyEstimate = 0
-            else:
-                accuracyEstimate = accuracyEstimateSum / float(instances - noMatch)
-
-            # Adjustment for uncovered instances - to avoid positive or negative bias we incorporate the probability of guessing a phenotype by chance (e.g. 50% if two phenotypes)
-            instanceCoverage = 1.0 - (float(noMatch) / float(instances))
-            adjustedAccuracyEstimate = accuracyEstimateSum / float(
-                instances)  # noMatchs are treated as incorrect predictions (can see no other fair way to do this)
-
-            print("-----------------------------------------------")
-            print(str(myType) + " Evaluation Results:-------------")
-            print("Instance Coverage = " + str(instanceCoverage * 100.0) + '%')
-            print("Estimated Prediction Accuracy (Ignore uncovered) = " + str(accuracyEstimate))
-            print("Estimated Prediction Accuracy (Penalty uncovered) = " + str(adjustedAccuracyEstimate))
-            # Balanced and Standard Accuracies will only be the same when there are equal instances representative of each phenotype AND there is 100% covering.
-            resultList = [adjustedAccuracyEstimate, instanceCoverage]
-            return resultList
-
         def doPopAnalysis(self):
             initialCount = len(self.population.popSet)
             newPopSet = []
@@ -2562,23 +2672,91 @@ def MLRBC(arg):
             newCount = len(newPopSet)
             self.population.popSet = newPopSet
 
-            # dict = {}
-            # for cl in self.population.popSet:
-            #     if cl.phenotype in dict.keys():
-            #         acc = dict[cl.phenotype]
-            #         acc.append(cl.accuracy)
-            #         dict[cl.phenotype] = acc
-            #     else:
-            #         acc = []
-            #         acc.append(cl.accuracy)
-            #         dict[cl.phenotype] = acc
-            # info = {}
-            # for label in dict.keys():
-            #     maxx = max(dict[label])
-            #     meann = np.mean(dict[label])
-            #     minn = min(dict[label])
-            #     info[label] = [maxx, meann, minn]
+            label_matrix = []
+            for cl in self.population.popSet:
+                label = [0] * cons.env.formatData.ClassCount
+                for l in cl.phenotype:
+                    label[l] = 1
+                label_matrix.append(label)
+            label_matrix = np.array(label_matrix)
+            Sm = self.similarity(label_matrix, 'cosine')
+            G = nx.Graph()
+            edge_list = []
+            for c1 in range(cons.env.formatData.ClassCount):
+                for c2 in range(c1 + 1, cons.env.formatData.ClassCount):
+                    # l1 = label_matrix[:, c1]
+                    # l2 = label_matrix[:, c2]
+                    edge_exists = np.dot(label_matrix[:, c1], label_matrix[:, c2]) > 0
+                    if edge_exists:
+                        edge_list.append((c1, c2))
+                        w = Sm[c1, c2]
+                        G.add_weighted_edges_from([(c1, c2, w)])
+                    else:
+                        G.add_node(c1)
+                        G.add_node(c2)
 
+            fig2, ax2 = plt.subplots()
+            ax2.set_title('Modeled label graph')
+            pos = nx.spring_layout(G)
+            nx.draw_networkx_nodes(G, pos)
+            keys = np.arange(cons.env.formatData.ClassCount)
+            vals = [str(l) for l in np.arange(cons.env.formatData.ClassCount)]
+            lbls = {key: value for key, value in zip(keys, vals)}  # dict(zip(keys, vals))
+            nx.draw_networkx_labels(G, pos, lbls, font_size=12)
+            nx.draw_networkx_edges(G, pos, edge_list=edge_list, width=1, alpha=0.5)
+            plt.savefig(DATA_HEADER + '_rules_graph')
+            plt.show()
+
+            dict = {}
+            for cl in self.population.popSet:
+                if tuple(cl.phenotype) in dict.keys():
+                    acc = dict[tuple(cl.phenotype)]
+                    acc.append(cl.accuracy)
+                    dict[tuple(cl.phenotype)] = acc
+                else:
+                    acc = []
+                    acc.append(cl.accuracy)
+                    dict[tuple(cl.phenotype)] = acc
+            info = {}
+            for label in dict.keys():
+                maxx = max(dict[label])
+                meann = np.mean(dict[label])
+                minn = min(dict[label])
+                info[label] = [round(maxx, 3), round(meann, 3), round(minn, 3)]
+            print('Number of final LPs: ', len(info))
+
+        def similarity(self, label_matrix, measure):
+            """
+            :param labels: the complete set of labels
+            :param measure: similarity measure to be calculated. 'co-occur', 'hamming', 'cosine'
+            :param
+            :return Sim: similarity based on hamming distance
+            :return cosine: cosine similarity
+            :return occurrence: Co-occurrence similarity
+            """
+            label_count = cons.env.formatData.ClassCount
+            sim_measure = np.zeros((label_count, label_count))
+
+            if measure == 'co-occur':
+                for i in range(label_count):
+                    for j in range(label_count):
+                        first_label = [l[i] for l in label_matrix]
+                        second_label = [l[j] for l in label_matrix]
+                        sim_measure[i, j] = np.dot(first_label, second_label) / np.linalg.norm(second_label, 1)
+            else:
+                if measure == 'hamming':
+                    for i in range(label_count):
+                        first_label = [l[i] for l in label_matrix]
+                        for j in range(i + 1, label_count):
+                            second_label = [l[j] for l in label_matrix]
+                            sim_measure[i, j] = np.sum(
+                                np.array([1 for (l1, l2) in zip(first_label, second_label) if l1 == l2])) \
+                                                / len(label_matrix)
+                            sim_measure[j, i] = sim_measure[i, j]
+                elif measure == 'cosine':
+                    label_matrix_sparse = sparse.csr_matrix(np.array(label_matrix).transpose())
+                    sim_measure = cosine_similarity(label_matrix_sparse)
+            return sim_measure
 
 
     class OutputFileManager:
