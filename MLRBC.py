@@ -710,13 +710,14 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # MUTATE PHENOTYPE
             # -------------------------------------------------------
+            nowChanged = False
             # if cons.env.formatData.discretePhenotype:
             #     nowChanged = self.discretePhenotypeMutation()
             # elif cons.env.formatData.MLphenotype:
-            nowChanged = self.MLphenotypeMutation(phenotype)
-            while (Acc.countLabel(self.phenotype) == 0):
-                nowChanged = self.MLphenotypeMutation(phenotype)
-            # else:
+            # nowChanged = self.MLphenotypeMutation(phenotype)
+            # while (Acc.countLabel(self.phenotype) == 0):
+            #     nowChanged = self.MLphenotypeMutation(phenotype)
+            # # else:
             #     nowChanged = self.continuousPhenotypeMutation(phenotype)
 
             if changed or nowChanged:
@@ -898,9 +899,9 @@ def MLRBC(arg):
         # PARAMETER UPDATES
         # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         def updateAccuracy(self):
-            if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
+            # if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
                 # self.accuracy = self.correctCount / float(self.matchCount)
-                self.accuracy = 1 - (self.loss / float(self.matchCount))
+            self.accuracy = 1 - (self.loss / float(self.matchCount))
 
 
         def updateFitness(self, matchSetNumAcc):
@@ -1193,20 +1194,13 @@ def MLRBC(arg):
         def labelGraphPartition(self, setNumerositySum, exploreIter, state):
             candidate_index = random.sample(self.matchSet, 1)[0]
             candidate_cl = self.popSet[candidate_index]
-            # if len(candidate_cl.phenotype) > 2:
             if self.countLabel(candidate_cl.phenotype) > 2:
                 if CLUSTERING_MODE == 'local':
                     label_matrix = []
-                    # matchsetLabels = set([])
                     for m in self.matchSet:
                         cl = self.popSet[m]
                         label = [int(l) for l in cl.phenotype.strip()]
                         label_matrix.append(label)
-                        # matchsetLabels = set(cl.phenotype).union(matchsetLabels)
-                        # label = [0] * cons.env.formatData.ClassCount
-                        # for l in cl.phenotype:
-                        #     label[l] = 1
-                        # label_matrix.append(label)
                     label_matrix = np.array(label_matrix)
                     temp = np.sum(label_matrix, axis=0)
                     matchsetLabels = [l for l in range(cons.env.formatData.ClassCount) if temp[l] != 0]
@@ -1228,8 +1222,6 @@ def MLRBC(arg):
 
                 newCl1 = None
                 newCl2 = None
-                # cluster0 = [l for l in candidate_cl.phenotype if l in label_clusters[0]]
-                # cluster1 = [l for l in candidate_cl.phenotype if l not in cluster0]
                 empty_label = cons.env.formatData.ClassCount*['0']
                 candidate_phenotype0 = list(copy.deepcopy(candidate_cl.phenotype).strip())
                 candidate_phenotype1 = list(copy.deepcopy(candidate_cl.phenotype).strip())
@@ -1331,8 +1323,8 @@ def MLRBC(arg):
             for i in range(len(self.matchSet)):
                 ref = self.matchSet[i]
                 prediction_int = int(self.popSet[ref].phenotype, 2)
-                # if self.isPhenotypeSubset(ref, phenotype):
-                if prediction_int == phenotype_int:
+                if self.isPhenotypeSubset(ref, phenotype):
+                # if prediction_int == phenotype_int:
                     self.correctSet.append(ref)
                     #elif cons.env.formatData.MLphenotype:
 
