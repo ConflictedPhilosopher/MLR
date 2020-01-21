@@ -519,7 +519,7 @@ class parallelRun():
         # e, v = np.linalg.eig(L)
 
         n_cluster = 2
-        sc = SpectralClustering(n_cluster, affinity='precomputed', n_init=100, assign_labels = 'kmeans',
+        sc = SpectralClustering(n_cluster, affinity='precomputed', n_init=100, assign_labels = 'discretize',
                                 random_state=SEED_NUMBER)
         sc.fit_predict(W)
         label_clusters = {}

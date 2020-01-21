@@ -7,6 +7,7 @@ from joblib import Parallel, delayed
 from sklearn.cluster import SpectralClustering
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy import sparse
+from scipy.sparse.csgraph import connected_components
 import matplotlib.pyplot as plt
 import networkx as nx
 
@@ -20,7 +21,7 @@ def MLRBC(arg):
     ###### Major Run Parameters - Essential to be set correctly for a successful run of the algorithm
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     outFileName = DATA_HEADER							# Path/NewName for new algorithm output files. Note: Do not give a file extension, this is done automatically.
-    learningIterations = str(NO_TRAIN_ITERATION)		# Specify complete algorithm evaluation checkpoints and maximum number of learning iterations (e.g. 1000.2000.5000 = A maximum of 5000 learning iterations with evaluations at 1000, 2000, and 5000 iterations)
+    learningIterations = NO_TRAIN_ITERATION		# Specify complete algorithm evaluation checkpoints and maximum number of learning iterations (e.g. 1000.2000.5000 = A maximum of 5000 learning iterations with evaluations at 1000, 2000, and 5000 iterations)
     N = POP_SIZE[0]									    # Maximum size of the rule population (a.k.a. Micro-classifier population size, where N is the sum of the classifier numerosities in the population)
     p_spec = 1 - P_HASH[0]									    # The probability of specifying an attribute when covering. (1-p_spec = the probability of adding '#' in ternary rule representations). Greater numbers of attributes in a dataset will require lower values of p_spec.
     exp = arg[0]
@@ -290,13 +291,13 @@ def MLRBC(arg):
 
         def parseIterations(self):
             """ Parse the 'learningIterations' string to identify the maximum number of learning iterations as well as evaluation checkpoints. """
-            checkpoints = self.learningIterations.split('.')
+            # checkpoints = self.learningIterations.split(',')
 
-            for i in range(len(checkpoints)):
-                checkpoints[i] = int(checkpoints[i])
+            # for i in range(len(checkpoints)):
+            #     checkpoints[i] = int(checkpoints[i])
 
-            self.learningCheckpoints = checkpoints  # next two lines needed for reboot
-            self.maxLearningIterations = self.learningCheckpoints[(len(self.learningCheckpoints) - 1)]  # ???
+            self.learningCheckpoints = self.learningIterations  # next two lines needed for reboot
+            self.maxLearningIterations = self.learningCheckpoints[-1]
 
             if self.trackingFrequency == 0:
                 self.trackingFrequency = self.env.formatData.numTrainInstances  # Adjust tracking frequency to match the training data size - learning tracking occurs once every epoch
@@ -1200,13 +1201,21 @@ def MLRBC(arg):
                     for m in self.matchSet:
                         cl = self.popSet[m]
                         label = [int(l) for l in cl.phenotype.strip()]
-                        label_matrix.append(label)
+                        for n in range(cl.numerosity):
+                            label_matrix.append(label)
                     label_matrix = np.array(label_matrix)
                     temp = np.sum(label_matrix, axis=0)
                     matchsetLabels = [l for l in range(cons.env.formatData.ClassCount) if temp[l] != 0]
                     label_matrix_M = label_matrix[:, matchsetLabels]
                     label_similarity = self.similarity(label_matrix_M, 'cosine')
-                    label_clusters = self.graph(matchsetLabels, label_similarity)
+                    n_connected_components, label_connected_components = connected_components(label_similarity)
+                    if n_connected_components > 1:
+                        label_clusters = {}
+                        for c in range(n_connected_components):
+                            label_clusters[c] = [matchsetLabels[node] for node in range(len(matchsetLabels)) if
+                                     label_connected_components[node] == c]
+                    else:
+                        label_clusters = self.graph(matchsetLabels, label_similarity)
                     """
                     by Xuyang: Density-based clustering method using local similarity goes here.
                     :param matchsetLabels: reference to the set of labels predicted by the rules in [M]
@@ -1219,6 +1228,9 @@ def MLRBC(arg):
                 else:
                     print('Label clustering mode not recognized!')
                     return
+
+                #To Do: create new classifiers for all of the returned label clusters from 'connected components'
+                #check. Currently, only first 2 are considered.
 
                 newCl1 = None
                 newCl2 = None
@@ -1266,7 +1278,7 @@ def MLRBC(arg):
             L = D - W
             # e, v = np.linalg.eig(L)
             n_cluster = 2
-            sc = SpectralClustering(n_cluster, affinity='precomputed', n_init=100, assign_labels='kmeans')
+            sc = SpectralClustering(n_cluster, affinity='precomputed', n_init=10, assign_labels='discretize')
             sc.fit_predict(W)
             label_clusters = {}
             for n in range(int(n_cluster)):
@@ -2286,7 +2298,7 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # MAJOR LEARNING LOOP
             # -------------------------------------------------------
-            while self.exploreIter < int(cons.learningIterations)+1:
+            while self.exploreIter < int(cons.maxLearningIterations)+1:
                 if (self.exploreIter % cons.trackingFrequency) == 0:
                     print('Iteration: ', self.exploreIter)
 
@@ -2314,7 +2326,7 @@ def MLRBC(arg):
                     testEval = self.doPopEvaluation(False)
                     d = abs(testEval[1]['HammingLoss'] - loss_previous)
                     if d < cons.error:
-                        cons.learningIterations = self.exploreIter
+                        cons.maxLearningIterations = self.exploreIter
                     else:
                         loss_previous = testEval[1]['HammingLoss']
 
@@ -2329,10 +2341,10 @@ def MLRBC(arg):
                 # -------------------------------------------------------
                 # CHECKPOINT - COMPLETE EVALUTATION OF POPULATION - strategy different for discrete vs continuous phenotypes
                 # -------------------------------------------------------
-                if (self.exploreIter) in [int(cons.learningIterations)]:
+                if (self.exploreIter) in cons.learningIterations:
                     cons.timer.startTimeEvaluation()
                     print("-------------------------------------------------------------------------------------------------------------------")
-                    print("Running Population Evaluation after " + str(self.exploreIter + 1) + " iterations.")
+                    print("Running Population Evaluation after " + str(self.exploreIter) + " iterations.")
 
                     self.population.runPopAveEval(self.exploreIter)
                     self.population.runAttGeneralitySum(True)

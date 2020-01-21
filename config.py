@@ -12,7 +12,7 @@ DATA_FOLDER = "D:\Datasets"
 RUN_RESULT_PATH = "Run_results_MLRBC"
 
 
-NO_TRAIN_ITERATION = 50000
+NO_TRAIN_ITERATION = [10000]
 POP_SIZE = [5000]
 P_HASH = [0.1]
 THETA_GA = [5] #[10,15,20,25,30,35,40,45,50,55,60]
@@ -30,6 +30,6 @@ PCUT_W = 0.5                      #threshold for the class-specific score-cut bi
 ADAPT_THETA_GA = False            #adaptive GA thershold selection for imbalanced data. True or False.
 PLOT_SETTING = [0, 1, 1, 0, 0]    #population sizes, accuracy, Hloss, generality, TP & TN
 
-CLUSTERING_MODE = 'global'   #'local': to do the calculation within each [M]. 'global': to calculate label clusters
+CLUSTERING_MODE = 'local'   #'local': to do the calculation within each [M]. 'global': to calculate label clusters
                              #a priori
-NO_EXPERIMENTS_AVERAGING = 10      #repeat the training to reduce the variance
+NO_EXPERIMENTS_AVERAGING = 1      #repeat the training to reduce the variance
