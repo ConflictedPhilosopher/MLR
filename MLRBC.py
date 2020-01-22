@@ -1232,6 +1232,31 @@ def MLRBC(arg):
                 #To Do: create new classifiers for all of the returned label clusters from 'connected components'
                 #check. Currently, only first 2 are considered.
 
+                empty_label = cons.env.formatData.ClassCount * ['0']
+                candidate_phenotype_list = []
+                for key in label_clusters.keys():
+                    candidate_phenotype = list(copy.deepcopy(candidate_cl.phenotype).strip())
+                    for l in label_clusters[key]:
+                        candidate_phenotype[l] = '0'
+                    if (candidate_phenotype == empty_label):
+                        pass
+                    else:
+                        candidate_phenotype_list.append(candidate_phenotype)
+                if len(candidate_phenotype_list) > 1:
+                    candidate_cl.updateNumerosity(-1)
+                    self.microPopSize -= 1
+                    if candidate_cl.numerosity < 1:
+                        self.removeMacroClassifier(candidate_index)
+                        self.deleteFromMatchSet(candidate_index)
+                    for candidate_phenotype in candidate_phenotype_list:
+                        new_classifier = Classifier(setNumerositySum + 1, exploreIter, state, candidate_cl.phenotype)
+                        new_classifier.phenotype = ''.join(candidate_phenotype)
+                        new_classifier.specifiedAttList = candidate_cl.specifiedAttList
+                        new_classifier.condition = candidate_cl.condition
+                        self.addClassifierToPopulation(new_classifier, False, True)
+                        self.matchSet.append(len(self.popSet) - 1)
+
+
                 newCl1 = None
                 newCl2 = None
                 empty_label = cons.env.formatData.ClassCount*['0']
