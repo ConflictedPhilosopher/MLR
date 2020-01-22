@@ -162,7 +162,7 @@ def Sharing(fitness, indices):
     return newfitness
 
 def Pseduo_Evolve(DisC, PeakIndices, PseDuoF, C_Indices, data, fitness, StdF, gamma, K):
-    if len(PeakIndices) == K:
+    if len(PeakIndices) <= K:
         return PeakIndices, PseDuoF, C_Indices
 
     # Initialize the indices of Historical Pseduo Clusters and their fitness values
@@ -280,9 +280,8 @@ def density_based(K, label, DisC, label_ref = None):
 
     cluster_info = {}
 
-    if len(SF) < 2:
-        print('Error 1')
-        print(SF)
+    if len(SF) < K:
+        return cluster_info
 
 
     for i in range(len(SF)):
