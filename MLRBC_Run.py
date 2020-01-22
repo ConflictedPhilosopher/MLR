@@ -18,6 +18,7 @@ import networkx as nx
 from DataManagement import DataManage
 import MLRBC
 import RebootModel
+from FPS_Clustering import density_based
 from config import *
 
 
@@ -469,6 +470,9 @@ class parallelRun():
             by Xuyang: density-based label clustering method using global similarity goes here.
             self.label_clusters = density_based(args...)
             """
+
+            num_clusters = 2
+            self.label_clusters = density_based(num_clusters, labels, 1 - self.label_similarity)
         except FileNotFoundError:
             print("completeData.csv not found.")
 

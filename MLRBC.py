@@ -13,6 +13,7 @@ import networkx as nx
 
 import numpy as np
 from sklearn.metrics import roc_curve, auc
+from FPS_Clustering import density_based
 
 from config import *
 
@@ -1216,6 +1217,8 @@ def MLRBC(arg):
                                      label_connected_components[node] == c]
                     else:
                         label_clusters = self.graph(matchsetLabels, label_similarity)
+                        num_clusters = 2
+                        label_clusters = density_based(num_clusters, label_matrix_M, 1 - label_similarity, matchsetLabels)
                     """
                     by Xuyang: Density-based clustering method using local similarity goes here.
                     :param matchsetLabels: reference to the set of labels predicted by the rules in [M]
@@ -1223,6 +1226,9 @@ def MLRBC(arg):
                                          to calculate similarity matrix.
                     label_clusters = density_based(args....)
                     """
+
+
+
                 elif CLUSTERING_MODE == 'global':
                     label_clusters = arg[5]
                 else:
