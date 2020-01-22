@@ -1139,14 +1139,9 @@ def MLRBC(arg):
                                 self.popSet[i].phenotype[1]):  # Check for phenotype coverage
                             doCovering = False
             else:
-                popSize = len(self.popSet)
-                for i in range(popSize):
+                for i in range(len(self.popSet)):
                     cl = self.popSet[i]  # One classifier at a time
-                    # calculate the average accuracy and count of over-general classifiers
-                    # if cl.isOverGeneral():
-                    #     overGenCount += 1
-                    #     overGenAccSum += cl.accuracy
-                    # theta_GA adaptation algorithm
+                    # theta_GA adaptation algorithm. Method not fully operational.
                     if ADAPT_THETA_GA:
                         if cl.isOverGeneral():
                             try:
@@ -1171,13 +1166,9 @@ def MLRBC(arg):
                                 doCovering = False
                 try:
                     self.aveNumerosity = setNumerositySum / len(self.popSet)
-                    # self.overGenAcc = overGenAccSum / overGenCount
                 except ZeroDivisionError:
                     self.aveNumerosity = 1
-                    # self.overGenAcc = 0
             cons.timer.stopTimeMatching()  # new
-
-
             # -------------------------------------------------------
             # COVERING
             # -------------------------------------------------------
@@ -1236,7 +1227,8 @@ def MLRBC(arg):
                     print('Label clustering mode not recognized!')
                     return
 
-                self.cluster_labels_insert(label_clusters, candidate_index, params)
+                if len(label_clusters.keys())>0:
+                    self.cluster_labels_insert(label_clusters, candidate_index, params)
                 # newCl1 = None
                 # newCl2 = None
                 # empty_label = cons.env.formatData.ClassCount*['0']

@@ -4,8 +4,8 @@ DO_AVERAGING = False               #reoprt averages performance
 NO_PARALLEL_JOBS = 10              #number of threads to perform parallel model training
 
 
-DATA_HEADER = "medical"
-NO_ATTRIBUTES = 1449
+DATA_HEADER = "flags"
+NO_ATTRIBUTES = 19
 VALID_DATA_HEADER = DATA_HEADER + "-test"
 TRAIN_DATA_HEADER = DATA_HEADER + "-train"
 DATA_FOLDER = "D:\Datasets"
@@ -19,7 +19,7 @@ THETA_GA = [5] #[10,15,20,25,30,35,40,45,50,55,60]
 NU = [50]
 NO_EXPERIMENTS_AVERAGING = 1      #repeat the training to reduce the variance
 DISTRIBUTED_MATCHING_TH = 2600000   
-REDUCE_ATTRIBUTE = 1              #feature selection parameter (1, <1, None). 1: considers feature-list.txt
+REDUCE_ATTRIBUTE = None              #feature selection parameter (1, <1, None). 1: considers feature-list.txt
                                   # <1: takes a portion of feature-list.txt, None: no feature selection
 REBOOT_MODEL = 0                  #reboot a previously trained model from the file
 DOWN_SAMPLE_RATIO = 1             #down_sampling ratio. For faster prototype evaluations
