@@ -1189,14 +1189,16 @@ def MLRBC(arg):
 
             cons.timer.startTimeBreakdown()
             if exploreIter > cons.env.formatData.numTrainInstances:
-            #     self.labelSetBreakDown(setNumerositySum, exploreIter, state)
-                self.labelGraphPartition(setNumerositySum, exploreIter, state)
+                #self.labelSetBreakDown(setNumerositySum, exploreIter, state)  #method not implemented
+                params = [setNumerositySum, exploreIter, state]
+                self.labelset_breakdown(params)
             cons.timer.stopTimeBreakdown()
 
-        def labelGraphPartition(self, setNumerositySum, exploreIter, state):
+        def labelset_breakdown(self, params):
             candidate_index = random.sample(self.matchSet, 1)[0]
             candidate_cl = self.popSet[candidate_index]
             if self.countLabel(candidate_cl.phenotype) > 2:
+                "proceed with label clustering..."
                 if CLUSTERING_MODE == 'local':
                     label_matrix = []
                     for m in self.matchSet:
@@ -1209,6 +1211,8 @@ def MLRBC(arg):
                     matchsetLabels = [l for l in range(cons.env.formatData.ClassCount) if temp[l] != 0]
                     label_matrix_M = label_matrix[:, matchsetLabels]
                     label_similarity = self.similarity(label_matrix_M, 'cosine')
+
+                    "Check for the existing isolated nodes or not connected components"
                     n_connected_components, label_connected_components = connected_components(label_similarity)
                     if n_connected_components > 1:
                         label_clusters = {}
@@ -1216,93 +1220,90 @@ def MLRBC(arg):
                             label_clusters[c] = [matchsetLabels[node] for node in range(len(matchsetLabels)) if
                                      label_connected_components[node] == c]
                     else:
-                        label_clusters = self.graph(matchsetLabels, label_similarity)
-                        num_clusters = 2
-                        label_clusters = density_based(num_clusters, label_matrix_M, 1 - label_similarity, matchsetLabels)
-                    """
-                    by Xuyang: Density-based clustering method using local similarity goes here.
-                    :param matchsetLabels: reference to the set of labels predicted by the rules in [M]
-                    :param label_matrix: binary representation of the labels predicted by the rules in [M]
-                                         to calculate similarity matrix.
-                    label_clusters = density_based(args....)
-                    """
-
-
-
+                        "label graph forms a connected component"
+                        if CLUSTERING_METHOD == 'graph':
+                            label_clusters = self.graph_clustering(matchsetLabels, label_similarity)
+                        elif CLUSTERING_METHOD == 'density':
+                            num_clusters = 2
+                            label_clusters = density_based(num_clusters, label_matrix_M, 1 - label_similarity, matchsetLabels)
+                        else:
+                            print('Label clustering method not recognized!')
+                            return
                 elif CLUSTERING_MODE == 'global':
+                    "use a clustering model obtained from the data set"
                     label_clusters = arg[5]
                 else:
                     print('Label clustering mode not recognized!')
                     return
 
-                #To Do: create new classifiers for all of the returned label clusters from 'connected components'
-                #check. Currently, only first 2 are considered.
-
-                empty_label = cons.env.formatData.ClassCount * ['0']
-                candidate_phenotype_list = []
-                for key in label_clusters.keys():
-                    candidate_phenotype = list(copy.deepcopy(candidate_cl.phenotype).strip())
-                    for l in label_clusters[key]:
-                        candidate_phenotype[l] = '0'
-                    if (candidate_phenotype == empty_label):
-                        pass
-                    else:
-                        candidate_phenotype_list.append(candidate_phenotype)
-                if len(candidate_phenotype_list) > 1:
-                    candidate_cl.updateNumerosity(-1)
-                    self.microPopSize -= 1
-                    if candidate_cl.numerosity < 1:
-                        self.removeMacroClassifier(candidate_index)
-                        self.deleteFromMatchSet(candidate_index)
-                    for candidate_phenotype in candidate_phenotype_list:
-                        new_classifier = Classifier(setNumerositySum + 1, exploreIter, state, candidate_cl.phenotype)
-                        new_classifier.phenotype = ''.join(candidate_phenotype)
-                        new_classifier.specifiedAttList = candidate_cl.specifiedAttList
-                        new_classifier.condition = candidate_cl.condition
-                        self.addClassifierToPopulation(new_classifier, False, True)
-                        self.matchSet.append(len(self.popSet) - 1)
-
-
-                newCl1 = None
-                newCl2 = None
-                empty_label = cons.env.formatData.ClassCount*['0']
-                candidate_phenotype0 = list(copy.deepcopy(candidate_cl.phenotype).strip())
-                candidate_phenotype1 = list(copy.deepcopy(candidate_cl.phenotype).strip())
-                for l in label_clusters[0]:
-                    candidate_phenotype0[l] = '0'
-                for l in label_clusters[1]:
-                    candidate_phenotype1[l] = '0'
-
-                if (candidate_phenotype0 != empty_label) and (candidate_phenotype1 != empty_label):
-                    newCl1 = Classifier(setNumerositySum + 1, exploreIter, state, candidate_cl.phenotype)
-                    newCl1.phenotype = ''.join(candidate_phenotype0)
-                    newCl1.specifiedAttList = candidate_cl.specifiedAttList
-                    newCl1.condition = candidate_cl.condition
-
-                    newCl2 = Classifier(setNumerositySum + 1, exploreIter, state, candidate_cl.phenotype)
-                    newCl2.phenotype = ''.join(candidate_phenotype1)
-                    newCl2.specifiedAttList = candidate_cl.specifiedAttList
-                    newCl2.condition = candidate_cl.condition
-
-                    candidate_cl.updateNumerosity(-1)
-                    self.microPopSize -= 1
-                    if candidate_cl.numerosity < 1:
-                        self.removeMacroClassifier(candidate_index)
-                        self.deleteFromMatchSet(candidate_index)
-
-                    if newCl1 is not None:
-                        self.addClassifierToPopulation(newCl1, False, True)
-                        self.matchSet.append(len(self.popSet) - 1)
-
-                    if newCl2 is not None:
-                        self.addClassifierToPopulation(newCl2, False, True)
-                        self.matchSet.append(len(self.popSet) - 1)
+                self.cluster_labels_insert(label_clusters, candidate_index, params)
+                # newCl1 = None
+                # newCl2 = None
+                # empty_label = cons.env.formatData.ClassCount*['0']
+                # candidate_phenotype0 = list(copy.deepcopy(candidate_cl.phenotype).strip())
+                # candidate_phenotype1 = list(copy.deepcopy(candidate_cl.phenotype).strip())
+                # for l in label_clusters[0]:
+                #     candidate_phenotype0[l] = '0'
+                # for l in label_clusters[1]:
+                #     candidate_phenotype1[l] = '0'
+                #
+                # if (candidate_phenotype0 != empty_label) and (candidate_phenotype1 != empty_label):
+                #     newCl1 = Classifier(setNumerositySum + 1, exploreIter, state, candidate_cl.phenotype)
+                #     newCl1.phenotype = ''.join(candidate_phenotype0)
+                #     newCl1.specifiedAttList = candidate_cl.specifiedAttList
+                #     newCl1.condition = candidate_cl.condition
+                #
+                #     newCl2 = Classifier(setNumerositySum + 1, exploreIter, state, candidate_cl.phenotype)
+                #     newCl2.phenotype = ''.join(candidate_phenotype1)
+                #     newCl2.specifiedAttList = candidate_cl.specifiedAttList
+                #     newCl2.condition = candidate_cl.condition
+                #
+                #     candidate_cl.updateNumerosity(-1)
+                #     self.microPopSize -= 1
+                #     if candidate_cl.numerosity < 1:
+                #         self.removeMacroClassifier(candidate_index)
+                #         self.deleteFromMatchSet(candidate_index)
+                #
+                #     if newCl1 is not None:
+                #         self.addClassifierToPopulation(newCl1, False, True)
+                #         self.matchSet.append(len(self.popSet) - 1)
+                #
+                #     if newCl2 is not None:
+                #         self.addClassifierToPopulation(newCl2, False, True)
+                #         self.matchSet.append(len(self.popSet) - 1)
             else:
                 return
 
-        def graph(self, matchsetLabels, W):
+        def cluster_labels_insert(self, label_clusters, candidate_index, arguments):
+            candidate_cl = self.popSet[candidate_index]
+            empty_label = cons.env.formatData.ClassCount * ['0']
+            candidate_phenotype_list = []
+            for key in label_clusters.keys():
+                candidate_phenotype = list(copy.deepcopy(candidate_cl.phenotype).strip())
+                for l in label_clusters[key]:
+                    candidate_phenotype[l] = '0'
+                if (candidate_phenotype == empty_label):
+                    pass
+                else:
+                    candidate_phenotype_list.append(candidate_phenotype)
+            if len(candidate_phenotype_list) > 1:
+                candidate_cl.updateNumerosity(-1)
+                self.microPopSize -= 1
+                if candidate_cl.numerosity < 1:
+                    self.removeMacroClassifier(candidate_index)
+                    self.deleteFromMatchSet(candidate_index)
+                for candidate_phenotype in candidate_phenotype_list:
+                    new_classifier = Classifier(arguments[0] + 1, arguments[1], arguments[2], candidate_cl.phenotype)
+                    new_classifier.phenotype = ''.join(candidate_phenotype)
+                    new_classifier.specifiedAttList = candidate_cl.specifiedAttList
+                    new_classifier.condition = candidate_cl.condition
+                    self.addClassifierToPopulation(new_classifier, False, True)
+                    self.matchSet.append(len(self.popSet) - 1)
+
+        def graph_clustering(self, matchsetLabels, W):
             """
-            :param labels:  the complete set of labels
+            :param matchsetLabels:  the set of labels appeared in [M]
+            :param W: similarity matrix for matchsetLabels
             :return label_clusters
             """
             D = np.diag(np.sum(W, axis=1))
@@ -1319,12 +1320,9 @@ def MLRBC(arg):
 
         def similarity(self, label_matrix, measure):
             """
-            :param labels: the complete set of labels
+            :param label_matrix: the complete set of labels
             :param measure: similarity measure to be calculated. 'co-occur', 'hamming', 'cosine'
-            :param
-            :return Sim: similarity based on hamming distance
-            :return cosine: cosine similarity
-            :return occurrence: Co-occurrence similarity
+            :return sim_measure: similarity matrix for labels in label_matrix (co-occurance, hamming, cosine)
             """
             label_count = cons.env.formatData.ClassCount
             sim_measure = np.zeros((label_count, label_count))

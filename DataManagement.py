@@ -44,7 +44,8 @@ class DataManage:
         else:
             rawTestData = self.loadData(testFile, False)
             self.numTestInstances = len(rawTestData)
-            rawTrainData, rawTestData = self.feasureSelection(rawTrainData, rawTestData)
+            if REDUCE_ATTRIBUTE is not None:
+                rawTrainData, rawTestData = self.feasureSelection(rawTrainData, rawTestData)
             data4Formating = rawTrainData + rawTestData  # Merge Training and Testing datasets
 
         self.characterizeDataset(rawTrainData)  # Detect number of attributes, instances, and reference locations.

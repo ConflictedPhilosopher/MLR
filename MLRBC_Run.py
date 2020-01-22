@@ -317,7 +317,7 @@ class parallelRun():
                         convertCSV2TXT(validDataCSV, completeValidFileName)
                     elif os.path.isfile(completeDataFileName):        # no data split exists, searching for complete.csv
                         completeData = pd.read_csv(completeDataFileName)
-                        completeDataSampled = self.tuneCard(completeData)
+                        # completeDataSampled = self.tuneCard(completeData)
                         data_train, data_valid = train_test_split(completeDataSampled, test_size = 1 - self.defaultSplit,
                                                                      random_state = SEED_NUMBER)
                         data_train.to_csv(trainDataCSV)
@@ -357,7 +357,7 @@ class parallelRun():
                         convertCSV2TXT(validDataCSV, completeValidFileName)
                     elif os.path.isfile(completeDataFileName):        # no data split exists, searching for complete.csv
                         completeData = pd.read_csv(completeDataFileName)
-                        completeDataSampled = self.tuneCard(completeData)
+                        # completeDataSampled = self.tuneCard(completeData)
                         data_train, data_valid = train_test_split(completeDataSampled, test_size = 1 - self.defaultSplit,
                                                                      random_state = SEED_NUMBER)
                         data_train.to_csv(trainDataCSV)
@@ -464,15 +464,15 @@ class parallelRun():
             print("dataProp: " + str(self.dataInfo))
 
             self.label_similarity = self.similarity(labels, 'cosine')
-            self.label_clusters = self.graph(labels, self.label_similarity)
+            if CLUSTERING_METHOD == 'graph':
+                self.label_clusters = self.graph(labels, self.label_similarity)
+            elif CLUSTERING_METHOD == 'density':
+                num_clusters = 2
+                self.label_clusters = density_based(num_clusters, labels, 1 - self.label_similarity)
+            else:
+                print('Label clustering method not recognized!')
+                return
 
-            """
-            by Xuyang: density-based label clustering method using global similarity goes here.
-            self.label_clusters = density_based(args...)
-            """
-
-            num_clusters = 2
-            self.label_clusters = density_based(num_clusters, labels, 1 - self.label_similarity)
         except FileNotFoundError:
             print("completeData.csv not found.")
 
