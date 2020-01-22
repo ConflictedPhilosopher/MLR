@@ -1,0 +1,24 @@
+Performance Statistics:------------------------------------------------------------------------
+Training Coverage	Testing Coverage	Training Performance	Test Performance
+1.0	1.0	{'HammingLoss': 0.04761904761904762, 'Precision': 0.9302325581395348, 'Accuracy': 0.910188261351052, 'Recall': 0.9436692506459948, 'F-measure': 0.9336163405930846, 'oneError': 0.015503875968992248, 'rankLoss': 0.13333333333333333, 'micro-F': 0.9484219490190472, 'macro-F': 0.9267898271134979, 'AUC-score': 0.984706918979153}	{'HammingLoss': 0.3164835164835163, 'Precision': 0.6023076923076922, 'Accuracy': 0.5084615384615383, 'Recall': 0.7028205128205127, 'F-measure': 0.6218192918192917, 'oneError': 0.26153846153846155, 'rankLoss': 0.24743589743589736, 'micro-F': 0.6308186204899093, 'macro-F': 0.49599063257372467, 'AUC-score': 0.55982314311141}
+
+Population Characterization:------------------------------------------------------------------------
+MacroPopSize	MicroPopSize	Generality
+1190	1380	0.45
+
+SpecificitySum:------------------------------------------------------------------------
+landmass	zone	area	population	language	religion	bars	stripes	colours	circles	crosses	saltires	quarters	sunstars	crescent	triangle	icon	animate	text
+662	599	632	679	732	703	638	580	597	704	718	619	702	643	686	674	709	716	686
+
+AccuracySum:------------------------------------------------------------------------
+landmass	zone	area	population	language	religion	bars	stripes	colours	circles	crosses	saltires	quarters	sunstars	crescent	triangle	icon	animate	text
+456.15253329929556	365.16110353441724	383.70751929000414	418.2292349041786	441.5681009503517	491.7980955609563	405.796076329718	414.05538279360377	388.3903767637896	455.65145089546854	446.9672502655195	380.5161867927086	461.7140330559075	398.9653228497061	409.33657556964886	411.23801648236645	449.89027204898895	412.69663022531637	393.55981155941964
+
+Run Time(in minutes):------------------------------------------------------------------------
+Global Time	0.11822652419408163
+Matching Time	0.030584971110026043
+Breakdown Time	0.02866966724395752
+Deletion Time	6.661017735799153e-05
+Subsumption Time	0.0
+Selection Time	0.0005164384841918945
+Evaluation Time	0.01614228884379069

@@ -3,6 +3,7 @@ import copy
 import math
 import time
 import os.path
+
 from joblib import Parallel, delayed
 from sklearn.cluster import SpectralClustering
 from sklearn.metrics.pairwise import cosine_similarity
@@ -10,11 +11,10 @@ from scipy import sparse
 from scipy.sparse.csgraph import connected_components
 import matplotlib.pyplot as plt
 import networkx as nx
-
 import numpy as np
 from sklearn.metrics import roc_curve, auc
-from FPS_Clustering import density_based
 
+from FPS_Clustering import density_based
 from config import *
 
 def MLRBC(arg):
@@ -52,7 +52,7 @@ def MLRBC(arg):
     delta = 0.1										# Deletion parameter; Used in determining deletion vote calculation.
     init_fit = 0.01									# The initial fitness for a new classifier. (typically very small, approaching but not equal to zero)
     fitnessReduction = 0.1							# Initial fitness reduction in GA offspring rules.
-    error = 0.000001
+    error = 0.001
     ######-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Algorithm Heuristic Options
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1190,6 +1190,7 @@ def MLRBC(arg):
             candidate_cl = self.popSet[candidate_index]
             if self.countLabel(candidate_cl.phenotype) > 2:
                 "proceed with label clustering..."
+                label_clusters = {}
                 if CLUSTERING_MODE == 'local':
                     label_matrix = []
                     for m in self.matchSet:
@@ -1202,24 +1203,24 @@ def MLRBC(arg):
                     matchsetLabels = [l for l in range(cons.env.formatData.ClassCount) if temp[l] != 0]
                     label_matrix_M = label_matrix[:, matchsetLabels]
                     label_similarity = self.similarity(label_matrix_M, 'cosine')
-
-                    "Check for the existing isolated nodes or not connected components"
-                    n_connected_components, label_connected_components = connected_components(label_similarity)
-                    if n_connected_components > 1:
-                        label_clusters = {}
-                        for c in range(n_connected_components):
-                            label_clusters[c] = [matchsetLabels[node] for node in range(len(matchsetLabels)) if
-                                     label_connected_components[node] == c]
-                    else:
-                        "label graph forms a connected component"
-                        if CLUSTERING_METHOD == 'graph':
-                            label_clusters = self.graph_clustering(matchsetLabels, label_similarity)
-                        elif CLUSTERING_METHOD == 'density':
-                            num_clusters = 2
-                            label_clusters = density_based(num_clusters, label_matrix_M, 1 - label_similarity, matchsetLabels)
+                    if not np.all(label_similarity == 1):
+                        "Check for the existing isolated nodes or not connected components"
+                        n_connected_components, label_connected_components = connected_components(label_similarity)
+                        if n_connected_components > 1:
+                            label_clusters = {}
+                            for c in range(n_connected_components):
+                                label_clusters[c] = [matchsetLabels[node] for node in range(len(matchsetLabels)) if
+                                         label_connected_components[node] == c]
                         else:
-                            print('Label clustering method not recognized!')
-                            return
+                            "label graph forms a connected component"
+                            if CLUSTERING_METHOD == 'graph':
+                                label_clusters = self.graph_clustering(matchsetLabels, label_similarity)
+                            elif CLUSTERING_METHOD == 'density':
+                                num_clusters = 2
+                                label_clusters = density_based(num_clusters, label_matrix_M, 1 - label_similarity, matchsetLabels)
+                            else:
+                                print('Label clustering method not recognized!')
+                                return
                 elif CLUSTERING_MODE == 'global':
                     "use a clustering model obtained from the data set"
                     label_clusters = arg[5]
@@ -2237,7 +2238,7 @@ def MLRBC(arg):
             if cons.doPopulationReboot:
                 self.correct = [0.0 for i in range(cons.trackingFrequency)]
                 self.population = arg[-1]  # Population reboot
-                self.doPopAnalysis()
+                # self.doPopAnalysis()
 
                 # self.population.runPopAveEval(self.exploreIter)
                 # self.population.runAttGeneralitySum(True)

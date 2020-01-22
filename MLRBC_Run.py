@@ -318,7 +318,7 @@ class parallelRun():
                     elif os.path.isfile(completeDataFileName):        # no data split exists, searching for complete.csv
                         completeData = pd.read_csv(completeDataFileName)
                         # completeDataSampled = self.tuneCard(completeData)
-                        data_train, data_valid = train_test_split(completeDataSampled, test_size = 1 - self.defaultSplit,
+                        data_train, data_valid = train_test_split(completeData, test_size = 1 - self.defaultSplit,
                                                                      random_state = SEED_NUMBER)
                         data_train.to_csv(trainDataCSV)
                         data_valid.to_csv(validDataCSV)
@@ -335,11 +335,13 @@ class parallelRun():
                     argument.append(self.label_clusters)
                     if REBOOT_MODEL:
                         modelName = os.path.join(RUN_RESULT_PATH,
-                                                 DATA_HEADER + "_MLRBC_RulePop_" + str(it + 1) + ".txt")
+                                                 DATA_HEADER + "_MLRBC_RulePop_" + str(it) + ".txt")
                         Pop = RebootModel.ClassifierSet(dataManage, modelName)
                         argument.append(Pop)
                     arg_instances.append(argument)
                 measures = Parallel(n_jobs = NO_PARALLEL_JOBS, verbose = 1, backend = "multiprocessing")(map(delayed(MLRBC.MLRBC), arg_instances))
+                # for meas in measures:
+                #     print([round(val, 4) for val in meas.values()])
                 self.meanPerformance(measures)
             else:
                 completeTrainFileName = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + ".txt")
@@ -358,7 +360,7 @@ class parallelRun():
                     elif os.path.isfile(completeDataFileName):        # no data split exists, searching for complete.csv
                         completeData = pd.read_csv(completeDataFileName)
                         # completeDataSampled = self.tuneCard(completeData)
-                        data_train, data_valid = train_test_split(completeDataSampled, test_size = 1 - self.defaultSplit,
+                        data_train, data_valid = train_test_split(completeData, test_size = 1 - self.defaultSplit,
                                                                      random_state = SEED_NUMBER)
                         data_train.to_csv(trainDataCSV)
                         data_valid.to_csv(validDataCSV)
