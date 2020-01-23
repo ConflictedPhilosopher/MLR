@@ -909,9 +909,9 @@ def MLRBC(arg):
         def updateFitness(self, matchSetNumAcc):
             # if cons.env.formatData.MLphenotype:
             if self.matchCount < 1.0 / cons.beta:
-                self.fitness = pow(self.accuracy, cons.nu)
+                self.fitness = max(pow(self.accuracy, cons.nu), cons.init_fit)
             else:
-                self.fitness = pow(self.accuracy, cons.nu)
+                self.fitness = max(pow(self.accuracy, cons.nu), cons.init_fit)
                     # k = self.accuracy * self.numerosity /(matchSetNumAcc)
                     # self.fitness = self.fitness + cons.beta * (k - self.fitness)
             # else:
