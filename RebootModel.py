@@ -10,6 +10,7 @@ class Classifier:
 
         self.fitness = 0.0  # Classifier fitness - initialized to a constant initial fitness value
         self.accuracy = 0.0  # Classifier accuracy - Accuracy calculated using only instances in the dataset which this rule matched.
+        self.loss = 0.0
         self.numerosity = 1  # The number of rule copies stored in the population.  (Indirectly stored as incremented numerosity)
         self.aveMatchSetSize = None  # A parameter used in deletion which reflects the size of match sets within this rule has been included.
         self.deletionVote = None  # The current deletion weight for this classifier.
@@ -111,10 +112,11 @@ class Classifier:
 
         # print(self.deletionVote)    does this not occur until population is full???
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-        classifierString += str("%.3f" % self.fitness) + "\t" + str("%.3f" % self.accuracy) + "\t" + str(
-            "%d" % self.numerosity) + "\t" + str("%.2f" % self.aveMatchSetSize) + "\t" + str(
-            "%d" % self.timeStampGA) + "\t" + str("%d" % self.initTimeStamp) + "\t" + str("%.2f" % specificity) + "\t"
-        classifierString += "\t" + str("%d" % self.correctCount) + "\t" + str("%d" % self.matchCount) + "\n"
+        classifierString += str("%.4f" % self.fitness) + "\t" + str("%.4f" % self.accuracy) + "\t" \
+                                + str("%.4f" %self.loss) + "\t" + str("%d" % self.numerosity) + "\t" \
+                                + str("%.4f" % self.aveMatchSetSize) + "\t" + str("%d" % self.timeStampGA) + "\t"\
+                                + str("%d" % self.initTimeStamp) + "\t"
+        classifierString += str("%d" % self.correctCount) + "\t" + str("%d" % self.matchCount) + "\n"
 
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         return classifierString
@@ -150,11 +152,11 @@ class Classifier:
 
         self.fitness = float(classifierList[numAttributes + 1])
         self.accuracy = float(classifierList[numAttributes + 2])
-        self.numerosity = int(classifierList[numAttributes + 3])
-        self.aveMatchSetSize = float(classifierList[numAttributes + 4])
-        self.timeStampGA = int(classifierList[numAttributes + 5])
-        self.initTimeStamp = int(classifierList[numAttributes + 6])
-        # self.deletionVote = float(classifierList[numAttributes + 8])
+        self.loss = float(classifierList[numAttributes + 3])
+        self.numerosity = int(classifierList[numAttributes + 4])
+        self.aveMatchSetSize = float(classifierList[numAttributes + 5])
+        self.timeStampGA = int(classifierList[numAttributes + 6])
+        self.initTimeStamp = int(classifierList[numAttributes + 7])
         self.correctCount = int(classifierList[numAttributes + 9])
         self.matchCount = int(classifierList[numAttributes + 10])
 

@@ -52,7 +52,7 @@ def MLRBC(arg):
     delta = 0.1										# Deletion parameter; Used in determining deletion vote calculation.
     init_fit = 0.01									# The initial fitness for a new classifier. (typically very small, approaching but not equal to zero)
     fitnessReduction = 0.1							# Initial fitness reduction in GA offspring rules.
-    error = 0.001
+    error = 0.00001
     ######-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Algorithm Heuristic Options
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -397,6 +397,7 @@ def MLRBC(arg):
             # self.experience = {}
             self.correctCount = 0  # The total number of times this classifier was in a correct set
             self.loss = 0
+            self.parent_label = []
             # self.precision = 0
             # self.recall = 0
             # self.f1 = 0
@@ -1017,11 +1018,11 @@ def MLRBC(arg):
 
             # print(self.deletionVote)    does this not occur until population is full???
             # ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-            classifierString += str("%.3f" % self.fitness) + "\t" + str("%.3f" % self.accuracy) + "\t" + str(
-                "%d" % self.numerosity) + "\t" + str("%.2f" % self.aveMatchSetSize) + "\t" + str(
-                "%d" % self.timeStampGA) + "\t" + str("%d" % self.initTimeStamp) + "\t" + str("%.2f" % specificity) + "\t"
-            # ???classifierString += str("%.2f" %self.deletionVote)+"\t"+str("%d" %self.correctCount)+"\t"+str("%d" %self.matchCount)+"\n"
-            classifierString += "\t" + str("%d" % self.correctCount) + "\t" + str("%d" % self.matchCount) + "\n"
+            classifierString += str("%.4f" % self.fitness) + "\t" + str("%.4f" % self.accuracy) + "\t" \
+                                + str("%4f" %self.loss) + "\t" + str("%d" % self.numerosity) + "\t" \
+                                + str("%.4f" % self.aveMatchSetSize) + "\t" + str("%d" % self.timeStampGA) + "\t"\
+                                + str("%d" % self.initTimeStamp) + "\t"
+            classifierString += str("%d" % self.correctCount) + "\t" + str("%d" % self.matchCount) + "\n"
 
             # ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
             return classifierString
@@ -1271,6 +1272,7 @@ def MLRBC(arg):
             candidate_cl = self.popSet[candidate_index]
             empty_label = cons.env.formatData.ClassCount * ['0']
             candidate_phenotype_list = []
+            parent_label = candidate_cl.parent_label
             for key in label_clusters.keys():
                 candidate_phenotype = list(copy.deepcopy(candidate_cl.phenotype).strip())
                 for l in label_clusters[key]:
@@ -1280,6 +1282,7 @@ def MLRBC(arg):
                 else:
                     candidate_phenotype_list.append(candidate_phenotype)
             if len(candidate_phenotype_list) > 1:
+                parent_label.append(candidate_cl.phenotype)
                 candidate_cl.updateNumerosity(-1)
                 self.microPopSize -= 1
                 if candidate_cl.numerosity < 1:
@@ -1290,6 +1293,7 @@ def MLRBC(arg):
                     new_classifier.phenotype = ''.join(candidate_phenotype)
                     new_classifier.specifiedAttList = candidate_cl.specifiedAttList
                     new_classifier.condition = candidate_cl.condition
+                    new_classifier.parent_label = parent_label
                     self.addClassifierToPopulation(new_classifier, False, True)
                     self.matchSet.append(len(self.popSet) - 1)
 
@@ -1357,8 +1361,8 @@ def MLRBC(arg):
             for i in range(len(self.matchSet)):
                 ref = self.matchSet[i]
                 prediction_int = int(self.popSet[ref].phenotype, 2)
-                if self.isPhenotypeSubset(ref, phenotype):
-                # if prediction_int == phenotype_int:
+                # if self.isPhenotypeSubset(ref, phenotype):
+                if prediction_int == phenotype_int:
                     self.correctSet.append(ref)
                     #elif cons.env.formatData.MLphenotype:
 
@@ -1946,7 +1950,7 @@ def MLRBC(arg):
                     else:
                         self.population.labelPowerSetList.append(cl.phenotype)
 
-                    vote = cl.fitness * cl.numerosity
+                    vote = cl.accuracy * cl.numerosity
                     # vote = cl.fitness
                     # vote = cl.fitness * (cons.env.formatData.numAttributes - len(cl.specifiedAttList))/cons.env.formatData.numAttributes
                     it = 0
@@ -2247,15 +2251,9 @@ def MLRBC(arg):
                     if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
                         trainEval = self.doPopEvaluation(True)
                         testEval = self.doPopEvaluation(False)
-                    else:
-                        trainEval = self.doContPopEvaluation(True)
-                        testEval = self.doContPopEvaluation(False)
                 else:  # Only a training file is available
                     if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
                         trainEval = self.doPopEvaluation(True)
-                        testEval = None
-                    else:
-                        trainEval = self.doContPopEvaluation(True)
                         testEval = None
 
                 if cons.ruleCompactionMethod != None:
@@ -2375,15 +2373,9 @@ def MLRBC(arg):
                         if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
                             trainEval = self.doPopEvaluation(True)
                             testEval = self.doPopEvaluation(False)
-                        else:
-                            trainEval = self.doContPopEvaluation(True)
-                            testEval = self.doContPopEvaluation(False)
                     else:  # Only a training file is available
                         if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
                             trainEval = self.doPopEvaluation(True)
-                            testEval = None
-                        else:
-                            trainEval = self.doContPopEvaluation(True)
                             testEval = None
 
                     cons.env.stopEvaluationMode()  # Returns to learning position in training data
@@ -2421,7 +2413,6 @@ def MLRBC(arg):
                                                       self.population, self.correct)
                     OutputFileManager().writePop(cons.outFileName, self.exploreIter + 1, self.population)
                     # ----------------------------------------------------------------------------------------------------------------------------
-
                 # -------------------------------------------------------
                 # ADJUST MAJOR VALUES FOR NEXT ITERATION
                 # -------------------------------------------------------
@@ -2431,6 +2422,7 @@ def MLRBC(arg):
             # Once eLCS has reached the last learning iteration, close the tracking file
             self.learnTrackOut.close()
             print("MLRBC Run Completed on model " + str(arg[0]))
+            # self.doPopAnalysis()
 
         def runIteration(self, state_phenotype_conf, exploreIter):
             # -----------------------------------------------------------------------------------------------------------------------------------------
@@ -2510,7 +2502,7 @@ def MLRBC(arg):
             # -----------------------------------------------------------------------------------------------------------------------------------------
             # RUN THE GENETIC ALGORITHM - Discover new offspring rules from a selected pair of parents
             # -----------------------------------------------------------------------------------------------------------------------------------------
-            if len(self.population.correctSet)>=1:
+            if len(self.population.correctSet)>=1:# and exploreIter < (cons.maxLearningIterations*0.9):
                 self.population.runGA(exploreIter, state_phenotype_conf[0], state_phenotype_conf[1])
             # -----------------------------------------------------------------------------------------------------------------------------------------
             # SELECT RULES FOR DELETION - This is done whenever there are more rules in the population than 'N', the maximum population size.
@@ -2690,66 +2682,69 @@ def MLRBC(arg):
             return resultList
 
         def doPopAnalysis(self):
-            initialCount = len(self.population.popSet)
             newPopSet = []
             for cl in self.population.popSet:
                 if cl.matchCount > 1:
                     newPopSet.append(cl)
-            newCount = len(newPopSet)
             self.population.popSet = newPopSet
 
+            for cl in self.population.popSet:
+                if cl.parent_label != []:
+                    parents = ', '.join(cl.parent_label)
+                    print(cl.phenotype + ', ' + parents + ', ' + str(cl.loss/cl.matchCount)+ ', ' + str(cl.matchCount)+ ', ' + str(cl.correctCount) + '\n')
+
             label_matrix = []
-            for cl in self.population.popSet:
-                label = [0] * cons.env.formatData.ClassCount
-                for l in cl.phenotype:
-                    label[l] = 1
-                label_matrix.append(label)
-            label_matrix = np.array(label_matrix)
-            Sm = self.similarity(label_matrix, 'cosine')
-            G = nx.Graph()
-            edge_list = []
-            for c1 in range(cons.env.formatData.ClassCount):
-                for c2 in range(c1 + 1, cons.env.formatData.ClassCount):
-                    # l1 = label_matrix[:, c1]
-                    # l2 = label_matrix[:, c2]
-                    edge_exists = np.dot(label_matrix[:, c1], label_matrix[:, c2]) > 0
-                    if edge_exists:
-                        edge_list.append((c1, c2))
-                        w = Sm[c1, c2]
-                        G.add_weighted_edges_from([(c1, c2, w)])
-                    else:
-                        G.add_node(c1)
-                        G.add_node(c2)
+            # for cl in self.population.popSet:
+            #     label = [0] * cons.env.formatData.ClassCount
+            #     for l in cl.phenotype:
+            #         label[l] = 1
+            #     label_matrix.append(label)
+            # label_matrix = np.array(label_matrix)
+            # Sm = self.similarity(label_matrix, 'cosine')
+            # G = nx.Graph()
+            # edge_list = []
+            # for c1 in range(cons.env.formatData.ClassCount):
+            #     for c2 in range(c1 + 1, cons.env.formatData.ClassCount):
+            #         # l1 = label_matrix[:, c1]
+            #         # l2 = label_matrix[:, c2]
+            #         edge_exists = np.dot(label_matrix[:, c1], label_matrix[:, c2]) > 0
+            #         if edge_exists:
+            #             edge_list.append((c1, c2))
+            #             w = Sm[c1, c2]
+            #             G.add_weighted_edges_from([(c1, c2, w)])
+            #         else:
+            #             G.add_node(c1)
+            #             G.add_node(c2)
+            #
+            # fig2, ax2 = plt.subplots()
+            # ax2.set_title('Modeled label graph')
+            # pos = nx.spring_layout(G)
+            # nx.draw_networkx_nodes(G, pos)
+            # keys = np.arange(cons.env.formatData.ClassCount)
+            # vals = [str(l) for l in np.arange(cons.env.formatData.ClassCount)]
+            # lbls = {key: value for key, value in zip(keys, vals)}  # dict(zip(keys, vals))
+            # nx.draw_networkx_labels(G, pos, lbls, font_size=12)
+            # nx.draw_networkx_edges(G, pos, edge_list=edge_list, width=1, alpha=0.5)
+            # plt.savefig(DATA_HEADER + '_rules_graph')
+            # plt.show()
 
-            fig2, ax2 = plt.subplots()
-            ax2.set_title('Modeled label graph')
-            pos = nx.spring_layout(G)
-            nx.draw_networkx_nodes(G, pos)
-            keys = np.arange(cons.env.formatData.ClassCount)
-            vals = [str(l) for l in np.arange(cons.env.formatData.ClassCount)]
-            lbls = {key: value for key, value in zip(keys, vals)}  # dict(zip(keys, vals))
-            nx.draw_networkx_labels(G, pos, lbls, font_size=12)
-            nx.draw_networkx_edges(G, pos, edge_list=edge_list, width=1, alpha=0.5)
-            plt.savefig(DATA_HEADER + '_rules_graph')
-            plt.show()
-
-            dict = {}
-            for cl in self.population.popSet:
-                if tuple(cl.phenotype) in dict.keys():
-                    acc = dict[tuple(cl.phenotype)]
-                    acc.append(cl.accuracy)
-                    dict[tuple(cl.phenotype)] = acc
-                else:
-                    acc = []
-                    acc.append(cl.accuracy)
-                    dict[tuple(cl.phenotype)] = acc
-            info = {}
-            for label in dict.keys():
-                maxx = max(dict[label])
-                meann = np.mean(dict[label])
-                minn = min(dict[label])
-                info[label] = [round(maxx, 3), round(meann, 3), round(minn, 3)]
-            print('Number of final LPs: ', len(info))
+            # dict = {}
+            # for cl in self.population.popSet:
+            #     if tuple(cl.phenotype) in dict.keys():
+            #         acc = dict[tuple(cl.phenotype)]
+            #         acc.append(cl.accuracy)
+            #         dict[tuple(cl.phenotype)] = acc
+            #     else:
+            #         acc = []
+            #         acc.append(cl.accuracy)
+            #         dict[tuple(cl.phenotype)] = acc
+            # info = {}
+            # for label in dict.keys():
+            #     maxx = max(dict[label])
+            #     meann = np.mean(dict[label])
+            #     minn = min(dict[label])
+            #     info[label] = [round(maxx, 3), round(meann, 3), round(minn, 3)]
+            # print('Number of final LPs: ', len(info))
 
         def similarity(self, label_matrix, measure):
             """
@@ -2883,7 +2878,7 @@ def MLRBC(arg):
             for i in range(len(headList)):
                 rulePopOut.write(str(headList[i]) + "\t")
             rulePopOut.write(
-                "Phenotype\tFitness\tAccuracy\tNumerosity\tAveMatchSetSize\tTimeStampGA\tInitTimeStamp\tSpecificity\tDeletionProb\tCorrectCount\tMatchCount\n")
+                "Phenotype\tFitness\tAccuracy\tLoss\tNumerosity\tAveMatchSetSize\tTimeStampGA\tInitTimeStamp\tCorrectCount\tMatchCount\n")
 
             # Write each classifier--------------------------------------------------------------------------------------------------------------------------------------
             for cl in pop.popSet:
