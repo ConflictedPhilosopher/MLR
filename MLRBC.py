@@ -2361,7 +2361,7 @@ def MLRBC(arg):
                 # -------------------------------------------------------
                 # CHECKPOINT - COMPLETE EVALUTATION OF POPULATION - strategy different for discrete vs continuous phenotypes
                 # -------------------------------------------------------
-                if (self.exploreIter) in cons.learningIterations:
+                if self.exploreIter in cons.learningIterations or self.exploreIter in [cons.maxLearningIterations]:
                     cons.timer.startTimeEvaluation()
                     print("-------------------------------------------------------------------------------------------------------------------")
                     print("Running Population Evaluation after " + str(self.exploreIter) + " iterations.")

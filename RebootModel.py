@@ -157,8 +157,8 @@ class Classifier:
         self.aveMatchSetSize = float(classifierList[numAttributes + 5])
         self.timeStampGA = int(classifierList[numAttributes + 6])
         self.initTimeStamp = int(classifierList[numAttributes + 7])
-        self.correctCount = int(classifierList[numAttributes + 9])
-        self.matchCount = int(classifierList[numAttributes + 10])
+        self.correctCount = int(classifierList[numAttributes + 8])
+        self.matchCount = int(classifierList[numAttributes + 9])
 
 
 class ClassifierSet:
