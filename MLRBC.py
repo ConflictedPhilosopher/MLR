@@ -32,19 +32,19 @@ def MLRBC(arg):
     ###### Logistical Run Parameters
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     labelInstanceID = "InstanceID"					# Label for the data column header containing instance ID's.  If included label not found, algorithm assumes that no instance ID's were included.
-    labelPhenotype = "Class"							# Label for the data column header containing the phenotype label. (Typically 'Class' for case/control datasets)
+    labelPhenotype = "Class"						# Label for the data column header containing the phenotype label. (Typically 'Class' for case/control datasets)
     labelMissingData = "NA"							# Label used for any missing data in the data set.
     discreteAttributeLimit = "NA"					# The maximum number of attribute states allowed before an attribute or phenotype is considered to be continuous (Set this value >= the number of states for any discrete attribute or phenotype in their dataset).
     discretePhenotypeLimit = "NA"
-    trackingFrequency = 5000 #NO_TRAIN_ITERATION						# Specifies the number of iterations before each estimated learning progress report by the algorithm ('0' = report progress every epoch, i.e. every pass through all instances in the training data).
+    trackingFrequency = 5000 						# Specifies the number of iterations before each estimated learning progress report by the algorithm ('0' = report progress every epoch, i.e. every pass through all instances in the training data).
 
     ######----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Supervised Learning Parameters - Generally just use default values.
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    nu = NU[0]									# (v) Power parameter used to determine the importance of high accuracy when calculating fitness. (typically set to 5, recommended setting of 1 in noisy data)
+    nu = NU[0]									    # (v) Power parameter used to determine the importance of high accuracy when calculating fitness. (typically set to 5, recommended setting of 1 in noisy data)
     chi = 0.8										# (X) The probability of applying crossover in the GA. (typically set to 0.5-1.0)
     upsilon = 0.04									# (u) The probability of mutating an allele within an offspring.(typically set to 0.01-0.05)
-    theta_GA = THETA_GA[0]									# The GA threshold; The GA is applied in a set when the average time since the last GA in the set is greater than theta_GA.
+    theta_GA = THETA_GA[0]							# The GA threshold; The GA is applied in a set when the average time since the last GA in the set is greater than theta_GA.
     theta_del = 20									# The deletion experience threshold; The calculation of the deletion probability changes once this threshold is passed.
     theta_sub = 200									# The subsumption experience threshold;
     acc_sub = 0.99									# Subsumption accuracy requirement
@@ -52,7 +52,7 @@ def MLRBC(arg):
     delta = 0.1										# Deletion parameter; Used in determining deletion vote calculation.
     init_fit = 0.01									# The initial fitness for a new classifier. (typically very small, approaching but not equal to zero)
     fitnessReduction = 0.1							# Initial fitness reduction in GA offspring rules.
-    error = 0.00001
+    error = 0.001
     ######-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Algorithm Heuristic Options
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -63,7 +63,7 @@ def MLRBC(arg):
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### PopulationReboot - An option to begin LCS learning from an existing, saved rule population. Note that the training data is re-shuffled during a reboot.
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    doPopulationReboot = REBOOT_MODEL							# Start eLCS from an existing rule population? (1 is True, 0 is False).
+    doPopulationReboot = REBOOT_MODEL				# Start eLCS from an existing rule population? (1 is True, 0 is False).
     popRebootPath = "None"
 
 
@@ -1181,7 +1181,6 @@ def MLRBC(arg):
 
             cons.timer.startTimeBreakdown()
             if exploreIter > cons.env.formatData.numTrainInstances:
-                #self.labelSetBreakDown(setNumerositySum, exploreIter, state)  #method not implemented
                 params = [setNumerositySum, exploreIter, state]
                 self.labelset_breakdown(params)
             cons.timer.stopTimeBreakdown()
@@ -1189,7 +1188,9 @@ def MLRBC(arg):
         def labelset_breakdown(self, params):
             candidate_index = random.sample(self.matchSet, 1)[0]
             candidate_cl = self.popSet[candidate_index]
-            if self.countLabel(candidate_cl.phenotype) > 2:
+            if self.countLabel(candidate_cl.phenotype) >= 2:
+                self.labelClusters = None
+                self.clPhenotypeBreakdown = False
                 "proceed with label clustering..."
                 label_clusters = {}
                 if CLUSTERING_MODE == 'local':
@@ -1204,7 +1205,10 @@ def MLRBC(arg):
                     matchsetLabels = [l for l in range(cons.env.formatData.ClassCount) if temp[l] != 0]
                     label_matrix_M = label_matrix[:, matchsetLabels]
                     label_similarity = self.similarity(label_matrix_M, 'cosine')
-                    if not np.all(label_similarity == 1):
+                    self.sim = label_similarity
+                    if np.sum(label_similarity) == len(label_similarity)**2:
+                        pass
+                    else:
                         "Check for the existing isolated nodes or not connected components"
                         n_connected_components, label_connected_components = connected_components(label_similarity)
                         if n_connected_components > 1:
@@ -1213,7 +1217,7 @@ def MLRBC(arg):
                                 label_clusters[c] = [matchsetLabels[node] for node in range(len(matchsetLabels)) if
                                          label_connected_components[node] == c]
                         else:
-                            "label graph forms a connected component"
+                            "label graph forms a single connected component"
                             if CLUSTERING_METHOD == 'graph':
                                 label_clusters = self.graph_clustering(matchsetLabels, label_similarity)
                             elif CLUSTERING_METHOD == 'density':
@@ -1229,42 +1233,8 @@ def MLRBC(arg):
                     print('Label clustering mode not recognized!')
                     return
 
-                if len(label_clusters.keys())>0:
+                if len(label_clusters.keys()) > 0:
                     self.cluster_labels_insert(label_clusters, candidate_index, params)
-                # newCl1 = None
-                # newCl2 = None
-                # empty_label = cons.env.formatData.ClassCount*['0']
-                # candidate_phenotype0 = list(copy.deepcopy(candidate_cl.phenotype).strip())
-                # candidate_phenotype1 = list(copy.deepcopy(candidate_cl.phenotype).strip())
-                # for l in label_clusters[0]:
-                #     candidate_phenotype0[l] = '0'
-                # for l in label_clusters[1]:
-                #     candidate_phenotype1[l] = '0'
-                #
-                # if (candidate_phenotype0 != empty_label) and (candidate_phenotype1 != empty_label):
-                #     newCl1 = Classifier(setNumerositySum + 1, exploreIter, state, candidate_cl.phenotype)
-                #     newCl1.phenotype = ''.join(candidate_phenotype0)
-                #     newCl1.specifiedAttList = candidate_cl.specifiedAttList
-                #     newCl1.condition = candidate_cl.condition
-                #
-                #     newCl2 = Classifier(setNumerositySum + 1, exploreIter, state, candidate_cl.phenotype)
-                #     newCl2.phenotype = ''.join(candidate_phenotype1)
-                #     newCl2.specifiedAttList = candidate_cl.specifiedAttList
-                #     newCl2.condition = candidate_cl.condition
-                #
-                #     candidate_cl.updateNumerosity(-1)
-                #     self.microPopSize -= 1
-                #     if candidate_cl.numerosity < 1:
-                #         self.removeMacroClassifier(candidate_index)
-                #         self.deleteFromMatchSet(candidate_index)
-                #
-                #     if newCl1 is not None:
-                #         self.addClassifierToPopulation(newCl1, False, True)
-                #         self.matchSet.append(len(self.popSet) - 1)
-                #
-                #     if newCl2 is not None:
-                #         self.addClassifierToPopulation(newCl2, False, True)
-                #         self.matchSet.append(len(self.popSet) - 1)
             else:
                 return
 
@@ -1279,9 +1249,17 @@ def MLRBC(arg):
                     candidate_phenotype[l] = '0'
                 if (candidate_phenotype == empty_label):
                     pass
+                elif candidate_phenotype == list(candidate_cl.phenotype.strip()):
+                    pass
                 else:
                     candidate_phenotype_list.append(candidate_phenotype)
             if len(candidate_phenotype_list) > 1:
+                original_labels =[]
+                i=0
+                for l in candidate_cl.phenotype:
+                    if l=='1':
+                        original_labels.append(i)
+                    i += 1
                 parent_label.append(candidate_cl.phenotype)
                 candidate_cl.updateNumerosity(-1)
                 self.microPopSize -= 1
@@ -1296,6 +1274,15 @@ def MLRBC(arg):
                     new_classifier.parent_label = parent_label
                     self.addClassifierToPopulation(new_classifier, False, True)
                     self.matchSet.append(len(self.popSet) - 1)
+
+                # if len(self.matchSet) > 2:
+                #     print("iteration ", arguments[1])
+                #     print("original labels: ", original_labels)
+                #     print("label clusters: ", label_clusters)
+                #     print("similarity matrix: ", self.sim)
+                #     for m in self.matchSet:
+                #         print("rule accuracy: ", self.popSet[m].accuracy)
+                #         print("rule copy: ", self.popSet[m].numerosity)
 
         def graph_clustering(self, matchsetLabels, W):
             """
@@ -2242,7 +2229,7 @@ def MLRBC(arg):
             if cons.doPopulationReboot:
                 self.correct = [0.0 for i in range(cons.trackingFrequency)]
                 self.population = arg[-1]  # Population reboot
-                # self.doPopAnalysis()
+                self.doPopAnalysis()
 
                 # self.population.runPopAveEval(self.exploreIter)
                 # self.population.runAttGeneralitySum(True)
@@ -2438,6 +2425,11 @@ def MLRBC(arg):
             prediction.calMaxPrediction()
             phenotypePrediction = prediction.getDecision()
 
+            prediction.combinePredictions()
+            prediction.oneThreshold()
+            prediction.getCombVote()
+
+
             itt = exploreIter % cons.trackingFrequency
             # -------------------------------------------------------
             # PREDICTION NOT POSSIBLE
@@ -2588,6 +2580,7 @@ def MLRBC(arg):
                     cons.env.newInstance(isTrain)
             else:
                 for inst in range(instances):
+                    combPred = []
                     if isTrain:
                         state_phenotype_conf = cons.env.getTrainInstance()
                     else:
@@ -2612,7 +2605,7 @@ def MLRBC(arg):
 
                     targetList[inst] = [int(l) for l in list(state_phenotype_conf[1])]  # The list of all target labels of the dataset
 
-                    if combPred == None:
+                    if self.population.matchSet == []:
                         labelList[inst] = noPrediction
                         noMatch += 1
                     elif combPred == 'Tie':
@@ -2673,6 +2666,7 @@ def MLRBC(arg):
             predictionTies = float(tie) / float(instances)
             instanceCoverage = 1.0 - predictionFail
             predictionMade = 1.0 - (predictionFail + predictionTies)
+            print("no match samples: ", predictionFail)
 
             # print("-----------------------------------------------")
             # print(str(myType) + " Evaluation Results on model " + str(arg[0]) +  ":")

@@ -11,7 +11,7 @@ class DataManage:
         self.labelInstanceID = "InstanceID"  # Label for the data column header containing instance ID's.  If included label not found, algorithm assumes that no instance ID's were included.
         self.labelPhenotype = "Class"  # Label for the data column header containing the phenotype label. (Typically 'Class' for case/control datasets)
         self.labelMissingData = "NA"  # Label used for any missing data in the data set.
-        self.discreteAttributeLimit = 10  # The maximum number of attribute states allowed before an attribute or phenotype is selfidered to be continuous (Set this value >= the number of states for any discrete attribute or phenotype in their dataset).
+        self.discreteAttributeLimit = 2  # The maximum number of attribute states allowed before an attribute or phenotype is selfidered to be continuous (Set this value >= the number of states for any discrete attribute or phenotype in their dataset).
         self.discretePhenotypeLimit = 5000
         self.classCount = classCount
         self.dataInfo = dataInfo
@@ -111,11 +111,13 @@ class DataManage:
             f.close()
 
         if REDUCE_ATTRIBUTE < 1:
-            featureCount = round(REDUCE_ATTRIBUTE * (len(datasetTrain[0])-1))
-            featureList = [int(f)-1 for f in featureRank]
+            featureCount = round(REDUCE_ATTRIBUTE * (len(featureRank)-1))
+            # featureList = [int(f)-1 for f in featureRank]
+            featureList = [int(f) for f in featureRank]
             selectionList = featureList[:featureCount] + [-1]
         elif len(featureRank) < (len(datasetTrain[0])-1):
-            featureList = [int(f) - 1 for f in featureRank]
+            # featureList = [int(f) - 1 for f in featureRank]
+            featureList = [int(f) for f in featureRank]
             selectionList = featureList + [-1]
         reducedDatasetTrain = datasetTrain[:, selectionList].tolist()
         reducedDatasetTest = datasetTest[:, selectionList].tolist()
