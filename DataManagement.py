@@ -44,8 +44,8 @@ class DataManage:
         else:
             rawTestData = self.loadData(testFile, False)
             self.numTestInstances = len(rawTestData)
-            if REDUCE_ATTRIBUTE is not None:
-                rawTrainData, rawTestData = self.feasureSelection(rawTrainData, rawTestData)
+            # if REDUCE_ATTRIBUTE is not None:
+            #     rawTrainData, rawTestData = self.feasureSelection(rawTrainData, rawTestData)
             data4Formating = rawTrainData + rawTestData  # Merge Training and Testing datasets
 
         self.characterizeDataset(rawTrainData)  # Detect number of attributes, instances, and reference locations.
@@ -342,6 +342,6 @@ class DataManage:
             else:
                 pass  # instance ID neither given nor required.
                 # -----------------------------------------------------------
-        random.shuffle(formatted)  # One time randomization of the order the of the instances in the data, so that if the data was ordered by phenotype, this potential learning bias (based on instance ordering) is eliminated.
+        # random.shuffle(formatted)  # One time randomization of the order the of the instances in the data, so that if the data was ordered by phenotype, this potential learning bias (based on instance ordering) is eliminated.
         return formatted
 
