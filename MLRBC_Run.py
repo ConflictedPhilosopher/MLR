@@ -14,6 +14,7 @@ from sklearn.cluster import SpectralClustering
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy import sparse
 import networkx as nx
+import seaborn as sns
 
 from DataManagement import DataManage
 import MLRBC
@@ -317,7 +318,6 @@ class parallelRun():
                         convertCSV2TXT(validDataCSV, completeValidFileName)
                     elif os.path.isfile(completeDataFileName):        # no data split exists, searching for complete.csv
                         completeData = pd.read_csv(completeDataFileName)
-                        # completeDataSampled = self.tuneCard(completeData)
                         data_train, data_valid = train_test_split(completeData, test_size = 1 - self.defaultSplit,
                                                                      random_state = SEED_NUMBER)
                         data_train.to_csv(trainDataCSV)
@@ -503,12 +503,27 @@ class parallelRun():
                     for j in range(i + 1, label_count):
                         second_label = [l[j] for l in label_matrix]
                         sim_measure[i, j] = np.sum(
-                            np.array([1 for (l1, l2) in zip(first_label, second_label) if l1 == l2])) / len(
-                            labels)
+                            np.array([1 for (l1, l2) in zip(first_label, second_label) if l1 == l2])) / len(labels)
                         sim_measure[j, i] = sim_measure[i, j]
             elif measure == 'cosine':
                 label_matrix_sparse = sparse.csr_matrix(np.array(label_matrix).transpose())
                 sim_measure = cosine_similarity(label_matrix_sparse)
+                label_sim = open(os.path.join(RUN_RESULT_PATH, DATA_HEADER + "_label_sim.txt"), 'w')
+                for row in sim_measure:
+                    label_sim.write(" ".join([str(r) for r in row]) + "\n")
+                label_sim.close()
+                ax = sns.heatmap(
+                    np.array(sim_measure),
+                    vmin=0, vmax=1, center=0.5,
+                    cmap=sns.diverging_palette(20, 220, n=200),
+                    square=True
+                )
+                ax.set_xticklabels(
+                    ax.get_xticklabels(),
+                    rotation=45,
+                    horizontalalignment='right'
+                )
+                plt.show()
         return sim_measure
 
     def graph(self, labels, W):
@@ -560,87 +575,6 @@ class parallelRun():
         # plt.show()
 
         return label_clusters
-
-    def tuneCard(self, inData):
-        """
-        :param inData: complete data in pd format
-        :return outData: down sampled data in pd format
-        """
-        if REF_CARDINALITY is None:
-            outData = inData.copy()
-            pass
-        else:
-            ClassDict = {}
-            Class = []
-            for idx, row in inData.iterrows():
-                label = [int(l) for l in row[NO_ATTRIBUTES:]]
-                newlabel = "".join(map(str, label))
-                Class.append(newlabel)
-                # if newlabel in ClassDict.keys():
-                #     ClassDict[newlabel] += 1
-                # else:
-                #     ClassDict[newlabel] = 1
-            labelHeader = list(inData.columns)
-            outData = inData.copy()
-            classHeader = labelHeader[NO_ATTRIBUTES:]
-            outData.drop(classHeader, axis=1, inplace=True)
-            outData["Class"] = Class
-            outData.sample(frac = 1, random_state = SEED_NUMBER )    # ***Cool Command!***
-
-            if self.dataInfo["card"] <= REF_CARDINALITY:
-                print("tuneCard: Increasing the label cardinality by down-sampling...")
-                theta_LP = int(REF_CARDINALITY)
-                downsample_LPs = []
-                class_unique = list(set(Class))     # ***Cool Command!***
-                for lp in class_unique:
-                    if self.countLabel(lp) <= theta_LP:
-                        downsample_LPs.append(lp)
-                        # downsample_LPs[lp] = ClassDict[lp]
-
-                while self.card(outData) < REF_CARDINALITY:
-                    "drop samples"
-                    # dropLP = min(ClassDict, key=ClassDict.get)     # ***Cool Command!***
-                    # if dropLP in downsample_LPs:
-                    #     outData = outData[outData["Class"] != dropLP]
-                    #     outData = outData.reset_index(drop = True)
-                    # ClassDict.pop(dropLP, None)
-                    for i in range(10):
-                        random_row = random.randint(0, len(outData)-1)
-                        if outData.loc[random_row]["Class"] in downsample_LPs:
-                             outData.drop([random_row], inplace = True, axis = 0)
-                        outData = outData.reset_index(drop = True)
-                print("The size of the down-sampled data is: " + str(len(outData)))
-            else:
-                print("tuneCard: Decreasing the label cardinality by down-sampling...")
-                theta_LP = int(REF_CARDINALITY) + 1
-                downsample_LPs = []
-                class_unique = list(set(Class))
-                for lp in class_unique:
-                    if self.countLabel(lp) >= theta_LP:
-                        downsample_LPs.append(lp)
-
-                while self.card(outData) > REF_CARDINALITY:
-                    "drop samples"
-                    for i in range(10):
-                        random_row = random.randint(0, len(outData)-1)
-                        if outData.loc[random_row]["Class"] in downsample_LPs:
-                            outData.drop([random_row], inplace = True, axis = 0)
-                        outData = outData.reset_index(drop = True)
-                print("The size of the down-sampled data is: " + str(len(outData)))
-
-            listLabels = []
-            for idx, row in outData.iterrows():
-                listLabels.append(list(row["Class"]))
-            outData.drop(["Class"], axis = 1, inplace = True)
-            for l in range(len(listLabels[0])):
-                outData["label" + str(l)] = [row[l] for row in listLabels]
-
-        if DOWN_SAMPLE_RATIO < 1.0:
-            print('Dataset down sampled.')
-            sampleCount = round(len(outData) * DOWN_SAMPLE_RATIO)
-            outData = outData.loc[0: sampleCount]
-
-        return outData
 
     def card(self, data):
         """
