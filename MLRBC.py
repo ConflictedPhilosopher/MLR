@@ -52,7 +52,7 @@ def MLRBC(arg):
     delta = 0.1										# Deletion parameter; Used in determining deletion vote calculation.
     init_fit = 0.01									# The initial fitness for a new classifier. (typically very small, approaching but not equal to zero)
     fitnessReduction = 0.1							# Initial fitness reduction in GA offspring rules.
-    error = 0.001
+    error = 0.01
     ######-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Algorithm Heuristic Options
     ######--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1114,9 +1114,6 @@ def MLRBC(arg):
             doCovering = True  # Covering check: Twofold (1)checks that a match is present, and (2) that at least one match dictates the correct phenotype.
             setNumerositySum = 0  # new
             k = 2
-            # overGenCount = 0
-            # overGenAccSum = 0
-
             # -------------------------------------------------------
             # MATCHING
             # -------------------------------------------------------
@@ -1209,7 +1206,7 @@ def MLRBC(arg):
                     if np.sum(label_similarity) == len(label_similarity)**2:
                         pass
                     else:
-                        "Check for the existing isolated nodes or not connected components"
+                        "Check for the existing isolated nodes or connected components"
                         n_connected_components, label_connected_components = connected_components(label_similarity)
                         if n_connected_components > 1:
                             label_clusters = {}
@@ -2229,7 +2226,7 @@ def MLRBC(arg):
             if cons.doPopulationReboot:
                 self.correct = [0.0 for i in range(cons.trackingFrequency)]
                 self.population = arg[-1]  # Population reboot
-                self.doPopAnalysis()
+                # self.doPopAnalysis()
 
                 # self.population.runPopAveEval(self.exploreIter)
                 # self.population.runAttGeneralitySum(True)
@@ -2585,7 +2582,21 @@ def MLRBC(arg):
                         state_phenotype_conf = cons.env.getTrainInstance()
                     else:
                         state_phenotype_conf = cons.env.getTestInstance()
+
                     self.population.makeEvalMatchSet(state_phenotype_conf[0])
+
+                    # label_matrix = []
+                    # for m in self.population.matchSet:
+                    #     cl = self.population.popSet[m]
+                    #     label = [int(l) for l in cl.phenotype.strip()]
+                    #     for n in range(cl.numerosity):
+                    #         label_matrix.append(label)
+                    # label_matrix = np.array(label_matrix)
+                    # temp = np.sum(label_matrix, axis=0)
+                    # matchsetLabels = [l for l in range(cons.env.formatData.ClassCount) if temp[l] != 0]
+                    # label_matrix_M = label_matrix[:, matchsetLabels]
+                    # label_similarity = self.similarity(label_matrix_M, 'cosine')
+
                     prediction = Prediction(self.population)
 
                     if PREDICTION_METHOD == 'max':
