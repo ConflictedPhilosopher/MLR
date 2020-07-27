@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 from sklearn.metrics import roc_curve, auc
+import seaborn as sns
 
 from FPS_Clustering import density_based
 from config import *
@@ -2528,6 +2529,31 @@ def MLRBC(arg):
             targetList = np.empty([instances, cons.env.formatData.ClassCount])
             noPrediction = np.zeros(cons.env.formatData.ClassCount)
 
+            def plot_similarity():
+                label_matrix = []
+                for m in self.population.matchSet:
+                    cl = self.population.popSet[m]
+                    label = [int(l) for l in cl.phenotype.strip()]
+                    for n in range(cl.numerosity):
+                        label_matrix.append(label)
+                label_matrix = np.array(label_matrix)
+                temp = np.sum(label_matrix, axis=0)
+                matchsetLabels = [l for l in range(cons.env.formatData.ClassCount) if temp[l] != 0]
+                label_matrix_M = label_matrix[:, matchsetLabels]
+                label_similarity = self.similarity(label_matrix_M, 'cosine')
+                ax = sns.heatmap(
+                    np.array(label_similarity),
+                    vmin=0, vmax=1, center=0.5,
+                    cmap=sns.diverging_palette(20, 220, n=200),
+                    square=True
+                )
+                ax.set_xticklabels(
+                    ax.get_xticklabels(),
+                    rotation=45,
+                    horizontalalignment='right'
+                )
+                plt.show()
+
             if THRESHOLD == 'pcut' and PREDICTION_METHOD == 'agg':
                 for inst in range(instances):
                     if isTrain:
@@ -2585,17 +2611,31 @@ def MLRBC(arg):
 
                     self.population.makeEvalMatchSet(state_phenotype_conf[0])
 
-                    # label_matrix = []
-                    # for m in self.population.matchSet:
-                    #     cl = self.population.popSet[m]
-                    #     label = [int(l) for l in cl.phenotype.strip()]
-                    #     for n in range(cl.numerosity):
-                    #         label_matrix.append(label)
-                    # label_matrix = np.array(label_matrix)
-                    # temp = np.sum(label_matrix, axis=0)
-                    # matchsetLabels = [l for l in range(cons.env.formatData.ClassCount) if temp[l] != 0]
-                    # label_matrix_M = label_matrix[:, matchsetLabels]
-                    # label_similarity = self.similarity(label_matrix_M, 'cosine')
+                    if not isTrain:
+                        # plot_similarity()
+                        label_matrix = []
+                        for m in self.population.matchSet:
+                            cl = self.population.popSet[m]
+                            label = [int(l) for l in cl.phenotype.strip()]
+                            for n in range(cl.numerosity):
+                                label_matrix.append(label)
+                        label_matrix = np.array(label_matrix)
+                        temp = np.sum(label_matrix, axis=0)
+                        matchsetLabels = [l for l in range(cons.env.formatData.ClassCount) if temp[l] != 0]
+                        label_matrix_M = label_matrix[:, matchsetLabels]
+                        label_similarity = self.similarity(label_matrix_M, 'cosine')
+                        ax = sns.heatmap(
+                            np.array(label_similarity),
+                            vmin=0, vmax=1, center=0.5,
+                            cmap=sns.diverging_palette(20, 220, n=200),
+                            square=True
+                        )
+                        ax.set_xticklabels(
+                            ax.get_xticklabels(),
+                            rotation=45,
+                            horizontalalignment='right'
+                        )
+                        plt.show()
 
                     prediction = Prediction(self.population)
 
