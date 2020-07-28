@@ -116,8 +116,8 @@ class DataManage:
             featureList = [int(f) for f in featureRank]
             selectionList = featureList[:featureCount] + [-1]
         elif len(featureRank) < (len(datasetTrain[0])-1):
-            featureList = [int(f) - 1 for f in featureRank]
-            # featureList = [int(f) for f in featureRank]  # correct form
+            # featureList = [int(f) - 1 for f in featureRank]
+            featureList = [int(f) for f in featureRank]  # correct form ************
             selectionList = featureList + [-1]
         reducedDatasetTrain = datasetTrain[:, selectionList].tolist()
         reducedDatasetTest = datasetTest[:, selectionList].tolist()

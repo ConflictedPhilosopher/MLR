@@ -1047,15 +1047,10 @@ def MLRBC(arg):
 
             # Evaluation Parameters-------------------------------
             self.aveGenerality = 0.0
-            # self.expRules = 0.0
             self.attributeSpecList = []
             self.attributeAccList = []
-            # self.avePhenotypeRange = 0.0
             self.theta_GA = cons.theta_GA
             self.aveNumerosity = 0.0
-            # self.majLP = cons.majLP   # majority Label Powerset
-            # self.minLP = cons.minLP   # minority Label Powerset
-            # self.genAveAcc = 0  # Average accuracy of the over-general classifiers
 
             # Set Constructors-------------------------------------
             if a == None:
@@ -1119,6 +1114,22 @@ def MLRBC(arg):
             # MATCHING
             # -------------------------------------------------------
             cons.timer.startTimeMatching()
+            def knn_matching():
+                k = 10
+                distance = []
+                for ind in self.matchSet:
+                    d = 0
+                    cl = self.popSet[ind]
+                    center = [(cond[1]-cond[0])/2 for cond in cl.condition]
+                    for it, att in enumerate(cl.specifiedAttList):
+                        att_range = abs(cons.env.formatData.attributeInfo[att][1][1]
+                                        - cons.env.formatData.attributeInfo[att][1][0])
+                        temp = abs(state[att] - center[it])
+                        d += math.pow(abs(state[att] - center[it]) / att_range, 2)
+                    distance.append(math.sqrt(d))
+                distance_dort_index = sorted(range(len(distance)), key=lambda x: distance[x])
+                matchset = distance_dort_index[:k]
+                self.matchSet = matchset
 
             if len(self.popSet) > DISTRIBUTED_MATCHING_TH:
                 argList = []
@@ -1139,30 +1150,34 @@ def MLRBC(arg):
                             doCovering = False
             else:
                 for i in range(len(self.popSet)):
-                    cl = self.popSet[i]  # One classifier at a time
-                    # theta_GA adaptation algorithm. Method not fully operational.
-                    if ADAPT_THETA_GA:
-                        if cl.isOverGeneral():
-                            try:
-                                IR = cl.experience[self.majLP] / (cl.experience[self.majLP] + cl.experience[self.minLP])
-                                if IR < 2000 and cl.numerosity > self.aveNumerosity:
-                                    self.theta_GA = k * (cl.experience[self.majLP] + cl.experience[self.minLP])/ cl.experience[self.minLP]
-                            except KeyError:
-                                pass
-                    else:
-                        pass
-                    #-------------------------------------------------------------
+                    cl = self.popSet[i]
                     if cl.match(state):
                         self.matchSet.append(i)
-                        setNumerositySum += cl.numerosity
-                        # Covering Check--------------------------------------------------------
-                        if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
-                            prediction_int = int(cl.phenotype, 2)
-                            if prediction_int == phenotype:  # Check for phenotype coverage
-                                doCovering = False
-                        else:
-                            if float(cl.phenotype[0]) <= float(phenotype) <= float(cl.phenotype[1]):  # Check for phenotype coverage
-                                doCovering = False
+                        # setNumerositySum += cl.numerosity
+                        # # Covering Check--------------------------------------------------------
+                        # if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
+                        #     prediction_int = int(cl.phenotype, 2)
+                        #     if prediction_int == phenotype:  # Check for phenotype coverage
+                        #         doCovering = False
+                        # else:
+                        #     if float(cl.phenotype[0]) <= float(phenotype) <= float(cl.phenotype[1]):  # Check for phenotype coverage
+                        #         doCovering = False
+
+                # if self.matchSet.__len__() > 10:
+                #     knn_matching()
+                for ind in self.matchSet:
+                    cl = self.popSet[ind]
+                    setNumerositySum += cl.numerosity
+                    # Covering Check--------------------------------------------------------
+                    if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype:
+                        prediction_int = int(cl.phenotype, 2)
+                        if prediction_int == phenotype:  # Check for phenotype coverage
+                            doCovering = False
+                    else:
+                        if float(cl.phenotype[0]) <= float(phenotype) <= float(
+                                cl.phenotype[1]):  # Check for phenotype coverage
+                            doCovering = False
+
                 try:
                     self.aveNumerosity = setNumerositySum / len(self.popSet)
                 except ZeroDivisionError:
@@ -1177,11 +1192,11 @@ def MLRBC(arg):
                 self.matchSet.append(len(self.popSet) - 1)  # Add covered classifier to matchset
                 doCovering = False
 
-            cons.timer.startTimeBreakdown()
-            if exploreIter > cons.env.formatData.numTrainInstances:
-                params = [setNumerositySum, exploreIter, state]
-                self.labelset_breakdown(params)
-            cons.timer.stopTimeBreakdown()
+            # cons.timer.startTimeBreakdown()
+            # if exploreIter > cons.env.formatData.numTrainInstances:
+            #     params = [setNumerositySum, exploreIter, state]
+            #     self.labelset_breakdown(params)
+            # cons.timer.stopTimeBreakdown()
 
         def labelset_breakdown(self, params):
             candidate_index = random.sample(self.matchSet, 1)[0]
@@ -2611,31 +2626,8 @@ def MLRBC(arg):
 
                     self.population.makeEvalMatchSet(state_phenotype_conf[0])
 
-                    if not isTrain:
-                        # plot_similarity()
-                        label_matrix = []
-                        for m in self.population.matchSet:
-                            cl = self.population.popSet[m]
-                            label = [int(l) for l in cl.phenotype.strip()]
-                            for n in range(cl.numerosity):
-                                label_matrix.append(label)
-                        label_matrix = np.array(label_matrix)
-                        temp = np.sum(label_matrix, axis=0)
-                        matchsetLabels = [l for l in range(cons.env.formatData.ClassCount) if temp[l] != 0]
-                        label_matrix_M = label_matrix[:, matchsetLabels]
-                        label_similarity = self.similarity(label_matrix_M, 'cosine')
-                        ax = sns.heatmap(
-                            np.array(label_similarity),
-                            vmin=0, vmax=1, center=0.5,
-                            cmap=sns.diverging_palette(20, 220, n=200),
-                            square=True
-                        )
-                        ax.set_xticklabels(
-                            ax.get_xticklabels(),
-                            rotation=45,
-                            horizontalalignment='right'
-                        )
-                        plt.show()
+                    # if not isTrain:
+                    #     plot_similarity()
 
                     prediction = Prediction(self.population)
 
@@ -2717,7 +2709,7 @@ def MLRBC(arg):
             predictionTies = float(tie) / float(instances)
             instanceCoverage = 1.0 - predictionFail
             predictionMade = 1.0 - (predictionFail + predictionTies)
-            print("no match samples: ", predictionFail)
+            # print("no match samples: ", predictionFail)
 
             # print("-----------------------------------------------")
             # print(str(myType) + " Evaluation Results on model " + str(arg[0]) +  ":")
