@@ -1115,7 +1115,7 @@ def MLRBC(arg):
             # -------------------------------------------------------
             cons.timer.startTimeMatching()
             def knn_matching():
-                k = 10
+                k = 5
                 distance = []
                 for ind in self.matchSet:
                     d = 0
@@ -1126,9 +1126,9 @@ def MLRBC(arg):
                                         - cons.env.formatData.attributeInfo[att][1][0])
                         temp = abs(state[att] - center[it])
                         d += math.pow(abs(state[att] - center[it]) / att_range, 2)
-                    distance.append(math.sqrt(d))
-                distance_dort_index = sorted(range(len(distance)), key=lambda x: distance[x])
-                matchset = distance_dort_index[:k]
+                    distance.append(math.sqrt(d) / cl.specifiedAttList.__len__())
+                distance_sort_index = sorted(range(len(distance)), key=lambda x: distance[x])
+                matchset = distance_sort_index[:k]
                 self.matchSet = matchset
 
             if len(self.popSet) > DISTRIBUTED_MATCHING_TH:
@@ -1163,8 +1163,8 @@ def MLRBC(arg):
                         #     if float(cl.phenotype[0]) <= float(phenotype) <= float(cl.phenotype[1]):  # Check for phenotype coverage
                         #         doCovering = False
 
-                # if self.matchSet.__len__() > 10:
-                #     knn_matching()
+                if self.matchSet.__len__() > 5:
+                    knn_matching()
                 for ind in self.matchSet:
                     cl = self.popSet[ind]
                     setNumerositySum += cl.numerosity
@@ -1387,11 +1387,31 @@ def MLRBC(arg):
 
         def makeEvalMatchSet(self, state):
             """ Constructs a match set for evaluation purposes which does not activate either covering or deletion. """
+            k = 5
+            def knn_matching(k):
+                distance = []
+                for ind in self.matchSet:
+                    d = 0
+                    cl = self.popSet[ind]
+                    center = [(cond[1]-cond[0])/2 for cond in cl.condition]
+                    for it, att in enumerate(cl.specifiedAttList):
+                        att_range = abs(cons.env.formatData.attributeInfo[att][1][1]
+                                        - cons.env.formatData.attributeInfo[att][1][0])
+                        d += math.pow(abs(state[att] - center[it]) / att_range, 2)
+                    distance.append(math.sqrt(d) / cl.specifiedAttList.__len__())
+                distance_sort_index = sorted(range(len(distance)), key=lambda x: distance[x])
+                matchset = distance_sort_index[:k]
+                self.matchSet = matchset
+
             popSize = len(self.popSet)
             for i in range(popSize):  # Go through the population
                 cl = self.popSet[i]  # A single classifier
                 if cl.match(state):  # Check for match
                     self.matchSet.append(i)  # Add classifier to match set
+
+            if self.matchSet.__len__() > k:
+                knn_matching(k)
+
 
         # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         # CLASSIFIER DELETION METHODS
@@ -2626,8 +2646,8 @@ def MLRBC(arg):
 
                     self.population.makeEvalMatchSet(state_phenotype_conf[0])
 
-                    # if not isTrain:
-                    #     plot_similarity()
+                    if not isTrain:
+                        plot_similarity()
 
                     prediction = Prediction(self.population)
 
