@@ -37,7 +37,7 @@ def MLRBC(arg):
     labelMissingData = "NA"							# Label used for any missing data in the data set.
     discreteAttributeLimit = "NA"					# The maximum number of attribute states allowed before an attribute or phenotype is considered to be continuous (Set this value >= the number of states for any discrete attribute or phenotype in their dataset).
     discretePhenotypeLimit = "NA"
-    trackingFrequency = 5000 						# Specifies the number of iterations before each estimated learning progress report by the algorithm ('0' = report progress every epoch, i.e. every pass through all instances in the training data).
+    trackingFrequency = 50000 						# Specifies the number of iterations before each estimated learning progress report by the algorithm ('0' = report progress every epoch, i.e. every pass through all instances in the training data).
 
     ######----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     ###### Supervised Learning Parameters - Generally just use default values.
@@ -395,10 +395,10 @@ def MLRBC(arg):
 
             # Classifier Accuracy Tracking -------------------------------------
             self.matchCount = 0  # Known in many LCS implementations as experience, i.e. the total number of times this classifier was in a match set
-            # self.experience = {}
             self.correctCount = 0  # The total number of times this classifier was in a correct set
             self.loss = 0
             self.parent_label = []
+            self.att_track = []
             # self.precision = 0
             # self.recall = 0
             # self.f1 = 0
@@ -423,21 +423,10 @@ def MLRBC(arg):
             self.timeStampGA = exploreIter
             self.initTimeStamp = exploreIter
             self.aveMatchSetSize = setSize
-            dataInfo = cons.env.formatData
             # -------------------------------------------------------
             # DISCRETE PHENOTYPE
             # -------------------------------------------------------
-            # if dataInfo.discretePhenotype or dataInfo.MLphenotype:
             self.phenotype = phenotype
-            # -------------------------------------------------------
-            # CONTINUOUS PHENOTYPE
-            # -------------------------------------------------------
-            # else:
-            #     phenotypeRange = dataInfo.phenotypeList[1] - dataInfo.phenotypeList[0]
-            #     rangeRadius = random.randint(25, 75) * 0.01 * phenotypeRange / 2.0  # Continuous initialization domain radius.
-            #     Low = float(phenotype) - rangeRadius
-            #     High = float(phenotype) + rangeRadius
-            #     self.phenotype = [Low, High]  # ALKR Representation, Initialization centered around training instance  with a range between 25 and 75% of the domain size.
             # -------------------------------------------------------
             # GENERATE MATCHING CONDITION
             # -------------------------------------------------------
@@ -446,12 +435,6 @@ def MLRBC(arg):
                 if random.random() < cons.p_spec and state[attRef] != cons.labelMissingData:
                     self.specifiedAttList.append(attRef)
                     self.condition.append(self.buildMatch(attRef, state))
-            # if self.isOverGeneral():
-            #     zero = []
-            #     for i in range(len(phenotype)):
-            #         zero.append('0')
-            #     zero = "".join(zero)
-            #     self.phenotype = zero
 
         def classifierCopy(self, clOld, exploreIter):
             """  Constructs an identical Classifier.  However, the experience of the copy is set to 0 and the numerosity
@@ -534,7 +517,7 @@ def MLRBC(arg):
         # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         def uniformCrossover(self, cl):
             """ Applies uniform crossover and returns if the classifiers changed. Handles both discrete and continuous attributes.
-            #SWARTZ: self. is where for the better attributes are more likely to be specified
+            #SWARTZ: self. is where the better attributes are more likely to be specified
             #DEVITO: cl. is where less useful attribute are more likely to be specified
             """
             if cons.env.formatData.discretePhenotype or cons.env.formatData.MLphenotype or random.random() < 0.5:  # Always crossover condition if the phenotype is discrete (if continuous phenotype, half the time phenotype crossover is performed instead)
@@ -569,24 +552,19 @@ def MLRBC(arg):
                     if ref == 0:  # Attribute not specified in either condition (Attribute type makes no difference)
                         print("Error: UniformCrossover!")
                         pass
-
-                    elif ref == 1:  # Attribute specified in only one condition - do probabilistic switch of whole attribute state (Attribute type makes no difference)
+                    elif ref == 1:  # do probabilistic switch of whole attribute state (Attribute type makes no difference)
                         if attRef in p_self_specifiedAttList and random.random() > probability:
                             i = self.specifiedAttList.index(attRef)  # reference to the position of the attribute in the rule representation
                             cl.condition.append(self.condition.pop(i))  # Take attribute from self and add to cl
                             cl.specifiedAttList.append(attRef)
                             self.specifiedAttList.remove(attRef)
                             changed = True  # Remove att from self and add to cl
-
                         if attRef in p_cl_specifiedAttList and random.random() < probability:
-                            i = cl.specifiedAttList.index(
-                                attRef)  # reference to the position of the attribute in the rule representation
+                            i = cl.specifiedAttList.index(attRef)  # reference to the position of the attribute in the rule representation
                             self.condition.append(cl.condition.pop(i))  # Take attribute from self and add to cl
                             self.specifiedAttList.append(attRef)
                             cl.specifiedAttList.remove(attRef)
                             changed = True  # Remove att from cl and add to self.
-
-
                     else:  # Attribute specified in both conditions - do random crossover between state alleles.  The same attribute may be specified at different positions within either classifier
                         # -------------------------------------------------------
                         # CONTINUOUS ATTRIBUTE
@@ -622,7 +600,6 @@ def MLRBC(arg):
                         # -------------------------------------------------------
                         else:
                             pass
-
                 tempList1 = copy.deepcopy(p_self_specifiedAttList)
                 tempList2 = copy.deepcopy(cl.specifiedAttList)
                 tempList1.sort()
@@ -658,10 +635,9 @@ def MLRBC(arg):
 
             return changed
 
-        def Mutation(self, state, phenotype):
+        def Mutation(self, state, phenotype, attTrack):
             """ Mutates the condition of the classifier. Also handles phenotype mutation. This is a niche mutation, which means that the resulting classifier will still match the current instance.  """
             changed = False
-            Acc = ClassAccuracy()
             # -------------------------------------------------------
             # MUTATE CONDITION
             # -------------------------------------------------------
@@ -669,19 +645,40 @@ def MLRBC(arg):
                 attributeInfo = cons.env.formatData.attributeInfo[attRef]
                 if random.random() < cons.upsilon and state[attRef] != cons.labelMissingData:
                     # MUTATION--------------------------------------------------------------------------------------------------------------
-                    if attRef not in self.specifiedAttList:  # Attribute not yet specified
+                    try:
+                        p = 0
+                        count = 0
+                        for idx, l in enumerate(phenotype):
+                            if l == '1':
+                                p += attTrack[idx][attRef]
+                                count += 1
+                        p = p/count
+                        # p = attTrack[phenotype][attRef]
+                    except KeyError:
+                        p = 1
+                    # if attRef not in self.specifiedAttList:  # Attribute not yet specified
+                    if attRef not in self.specifiedAttList and random.random() < max(p, 0.5):
                         self.specifiedAttList.append(attRef)
                         self.condition.append(self.buildMatch(attRef, state))  # buildMatch handles both discrete and continuous attributes
                         changed = True
-
                     elif attRef in self.specifiedAttList:  # Attribute already specified
                         i = self.specifiedAttList.index(attRef)  # reference to the position of the attribute in the rule representation
                         # -------------------------------------------------------
                         # DISCRETE OR CONTINUOUS ATTRIBUTE - remove attribute specification with 50% chance if we have continuous attribute, or 100% if discrete attribute.
                         # -------------------------------------------------------
-                        # if not attributeInfo[0] or random.random() > 0.5:
-                        if not attributeInfo[0] or random.random() > cons.p_spec:
-
+                        try:
+                            p = 0
+                            count = 0
+                            for idx, l in enumerate(phenotype):
+                                if l == '1':
+                                    p += attTrack[idx][attRef]
+                                    count += 1
+                            p = p / count
+                            # p = attTrack[phenotype][attRef]
+                        except KeyError:
+                            p = 0.5
+                        # if not attributeInfo[0] or random.random() > cons.p_spec:
+                        if not attributeInfo[0] or random.random() > max(p, 0.5):  # random.random() > cons.p_spec:
                             self.specifiedAttList.remove(attRef)
                             self.condition.pop(i)  # buildMatch handles both discrete and continuous attributes
                             changed = True
@@ -689,23 +686,39 @@ def MLRBC(arg):
                         # CONTINUOUS ATTRIBUTE - (mutate range with 50% probability vs. removing specification of this attribute all together)
                         # -------------------------------------------------------
                         else:
-                            # Mutate continuous range - based on Bacardit 2009 - Select one bound with uniform probability and add or subtract a randomly generated offset to bound, of size between 0 and 50% of att domain.
-                            attRange = float(attributeInfo[1][1]) - float(attributeInfo[1][0])
-                            mutateRange = random.random() * 0.5 * attRange
-                            if random.random() > 0.5:  # Mutate minimum
-                                if random.random() > 0.5:  # Add
-                                    self.condition[i][0] += mutateRange
-                                else:  # Subtract
-                                    self.condition[i][0] -= mutateRange
-                            else:  # Mutate maximum
-                                if random.random() > 0.5:  # Add
-                                    self.condition[i][1] += mutateRange
-                                else:  # Subtract
-                                    self.condition[i][1] -= mutateRange
-
-                            # Repair range - such that min specified first, and max second.
-                            self.condition[i].sort()
-                            changed = True
+                            try:
+                                p = 0
+                                count = 0
+                                for idx, l in enumerate(phenotype):
+                                    if l == '1':
+                                        p += attTrack[idx][attRef]
+                                        count += 1
+                                p = p / count
+                                # p = attTrack[phenotype][attRef]
+                            except KeyError:
+                                p = 0.5
+                            # if random.random() > 0.5:
+                            if random.random() > max(p, 0.5):
+                                self.specifiedAttList.remove(attRef)
+                                self.condition.pop(i)
+                                changed = True
+                            else:
+                                # Mutate continuous range - based on Bacardit 2009 - Select one bound with uniform probability and add or subtract a randomly generated offset to bound, of size between 0 and 50% of att domain.
+                                attRange = float(attributeInfo[1][1]) - float(attributeInfo[1][0])
+                                mutateRange = random.random() * 0.5 * attRange
+                                if random.random() > 0.5:  # Mutate minimum
+                                    if random.random() > 0.5:  # Add
+                                        self.condition[i][0] += mutateRange
+                                    else:  # Subtract
+                                        self.condition[i][0] -= mutateRange
+                                else:  # Mutate maximum
+                                    if random.random() > 0.5:  # Add
+                                        self.condition[i][1] += mutateRange
+                                    else:  # Subtract
+                                        self.condition[i][1] -= mutateRange
+                                # Repair range - such that min specified first, and max second.
+                                self.condition[i].sort()
+                                changed = True
                     # -------------------------------------------------------
                     # NO MUTATION OCCURS
                     # -------------------------------------------------------
@@ -715,14 +728,6 @@ def MLRBC(arg):
             # MUTATE PHENOTYPE
             # -------------------------------------------------------
             nowChanged = False
-            # if cons.env.formatData.discretePhenotype:
-            #     nowChanged = self.discretePhenotypeMutation()
-            # elif cons.env.formatData.MLphenotype:
-            # nowChanged = self.MLphenotypeMutation(phenotype)
-            # while (Acc.countLabel(self.phenotype) == 0):
-            #     nowChanged = self.MLphenotypeMutation(phenotype)
-            # # else:
-            #     nowChanged = self.continuousPhenotypeMutation(phenotype)
 
             if changed or nowChanged:
                 return True
@@ -1049,7 +1054,8 @@ def MLRBC(arg):
             self.aveGenerality = 0.0
             # self.expRules = 0.0
             self.attributeSpecList = []
-            self.attributeAccList = []
+            self.attributeAccList = {}
+            self.attributeAccListM = {}
             # self.avePhenotypeRange = 0.0
             self.theta_GA = cons.theta_GA
             self.aveNumerosity = 0.0
@@ -1178,9 +1184,9 @@ def MLRBC(arg):
                 doCovering = False
 
             cons.timer.startTimeBreakdown()
-            if exploreIter > cons.env.formatData.numTrainInstances:
-                params = [setNumerositySum, exploreIter, state]
-                self.labelset_breakdown(params)
+            # if exploreIter > cons.env.formatData.numTrainInstances:
+                # params = [setNumerositySum, exploreIter, state]
+                # self.labelset_breakdown(params)
             cons.timer.stopTimeBreakdown()
 
         def labelset_breakdown(self, params):
@@ -1449,7 +1455,7 @@ def MLRBC(arg):
         # ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
         # GENETIC ALGORITHM
         # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-        def runGA(self, exploreIter, state, phenotype):
+        def runGA(self, exploreIter, state, phenotype, attTrack):
             """ The genetic discovery mechanism in eLCS is controlled here. """
             # -------------------------------------------------------
             # GA RUN REQUIREMENT
@@ -1504,8 +1510,8 @@ def MLRBC(arg):
             # -------------------------------------------------------
             # MUTATION OPERATOR
             # -------------------------------------------------------
-            nowchanged = cl1.Mutation(state, phenotype)
-            howaboutnow = cl2.Mutation(state, phenotype)
+            nowchanged = cl1.Mutation(state, phenotype, attTrack)
+            howaboutnow = cl2.Mutation(state, phenotype, attTrack)
 
             # -------------------------------------------------------
             # ADD OFFSPRING TO POPULATION
@@ -1680,7 +1686,6 @@ def MLRBC(arg):
                 if ref in self.correctSet:
                     self.popSet[ref].updateCorrect()
                 self.popSet[ref].updateLoss(state_phenotype_conf[1])
-                self.popSet[ref].updateLoss(state_phenotype_conf[1])  # New
                 self.popSet[ref].updateAccuracy()
                 self.popSet[ref].updateFitness(matchSetNumAcc)
                 # matchSetNumAcc += self.popSet[ref].numerosity * self.popSet[ref].accuracy
@@ -1764,23 +1769,66 @@ def MLRBC(arg):
                 self.avePhenotypeRange = (sumRuleRange / float(self.microPopSize)) / float(phenotypeRange)
 
         # New method
+        def increment_att_tracking(self, matchset, it):
+            attAccLP = {}
+            for ref in matchset:
+                cl = self.popSet[ref]
+                if cl.phenotype in attAccLP.keys():
+                    attacc = attAccLP[cl.phenotype]
+                    for ref in cl.specifiedAttList:  # for each attRef
+                        attacc[ref] += cl.numerosity * cl.accuracy
+                    attAccLP[cl.phenotype] = attacc
+                else:
+                    attacc = [0] * cons.env.formatData.numAttributes
+                    for ref in cl.specifiedAttList:  # for each attRef
+                        attacc[ref] += cl.numerosity * cl.accuracy
+                    attAccLP[cl.phenotype] = attacc
+            for lp in attAccLP.keys():
+                accList = attAccLP[lp]/max(attAccLP[lp])
+                if lp in self.attributeAccListM.keys():
+                    self.attributeAccListM[lp].append([it])
+                    self.attributeAccListM[lp].append(accList)
+                else:
+                    self.attributeAccListM[lp] = [[it]]
+                    self.attributeAccListM[lp].append(accList)
+
         def runAttGeneralitySum(self, isEvaluationSummary):
             """ Determine the population-wide frequency of attribute specification, and accuracy weighted specification.  Used in complete rule population evaluations. """
-            self.attributeTracking = []
+            # self.attributeTracking = []
             if isEvaluationSummary:
-                self.attributeSpecList = []
-                self.attributeAccList = []
-                for i in range(cons.env.formatData.numAttributes):
-                    self.attributeSpecList.append(0)
-                    self.attributeAccList.append(0.0)
-                    self.attributeTracking.append(0)
+                attributeSpecList = []
+                self.attSpecLP = {}
+                self.attAccLP = {}
+                # for i in range(cons.env.formatData.numAttributes):
+                #     attributeSpecList.append(0)
+                #     attributeAccList.append(0.0)
                 for cl in self.popSet:
-                    for ref in cl.specifiedAttList:  # for each attRef
-                        self.attributeTracking[ref] += 1
-                        self.attributeSpecList[ref] += cl.numerosity
-                        self.attributeAccList[ref] += cl.numerosity * cl.accuracy
-
-            # print(self.attributeTracking)
+                    if cl.phenotype in self.attSpecLP.keys():
+                        attspec = self.attSpecLP[cl.phenotype]
+                        attacc = self.attAccLP[cl.phenotype]
+                        for ref in cl.specifiedAttList:  # for each attRef
+                            attspec[ref] += cl.numerosity
+                            attacc[ref] += cl.numerosity * cl.accuracy
+                        self.attSpecLP[cl.phenotype] = attspec
+                        self.attAccLP[cl.phenotype] = attacc
+                    else:
+                        attspec = [0] * cons.env.formatData.numAttributes
+                        attacc = [0] * cons.env.formatData.numAttributes
+                        for ref in cl.specifiedAttList:
+                            attspec[ref] = cl.numerosity
+                            attacc[ref] = cl.numerosity * cl.accuracy
+                        self.attSpecLP[cl.phenotype] = attspec
+                        self.attAccLP[cl.phenotype] = attacc
+            for lp in self.attAccLP.keys():
+                try:
+                    accList = self.attAccLP[lp] / max(self.attAccLP[lp])
+                except ZeroDivisionError and TypeError:
+                    accList = self.attAccLP[lp]
+                if lp in self.attributeAccList.keys():
+                    self.attributeAccList[lp].append(accList)
+                else:
+                    self.attributeAccList[lp] = []
+                    self.attributeAccList[lp].append(accList)
 
         def getPopTrack(self, Hloss, accuracy, exploreIter):
             """ Returns a formated output string to be printed to the Learn Track output file. """
@@ -1997,15 +2045,6 @@ def MLRBC(arg):
         def getCombVote(self):
             return self.combVote
 
-        def getFitnessSum(self, population, low, high):
-            """ Get the fitness sum of rules in the rule-set. For continuous phenotype prediction. """
-            fitSum = 0
-            for ref in population.matchSet:
-                cl = population.popSet[ref]
-                if cl.phenotype[0] <= low and cl.phenotype[1] >= high:  # if classifier range subsumes segment range.
-                    fitSum += cl.fitness
-            return fitSum
-
         def getDecision(self):
             return self.decision
 
@@ -2052,7 +2091,6 @@ def MLRBC(arg):
             self.macro_precision /= cons.env.formatData.ClassCount
             self.macro_recall /= cons.env.formatData.ClassCount
             self.macro_f = 2 * (self.macro_precision * self.macro_recall) / (self.macro_precision + self.macro_recall + e)
-
 
         def ExHammingLoss(self, phenotypePrediction, true_phenotype, phenotype_conf, true_conf):
             """
@@ -2221,6 +2259,8 @@ def MLRBC(arg):
             # Global Parameters-------------------------------------------------------------------------------------
             self.population = None  # The rule population (the 'solution/model' evolved by eLCS)
             self.learnTrackOut = None  # Output file that will store tracking information during learning
+            self.attTrack = {}
+            self.attTrackRecord = {}
             # -------------------------------------------------------
             # POPULATION REBOOT - Begin eLCS learning from an existing saved rule population
             # -------------------------------------------------------
@@ -2311,7 +2351,7 @@ def MLRBC(arg):
                 # GET NEW INSTANCE AND RUN A LEARNING ITERATION
                 # -------------------------------------------------------
                 state_phenotype_conf = cons.env.getTrainInstance()
-                self.runIteration(state_phenotype_conf, self.exploreIter)
+                matchset_copy = self.runIteration(state_phenotype_conf, self.exploreIter)
 
                 # -------------------------------------------------------------------------------------------------------------------------------
                 # EVALUATIONS OF ALGORITHM
@@ -2323,8 +2363,14 @@ def MLRBC(arg):
                 # -------------------------------------------------------
 
                 if (self.exploreIter % cons.trackingFrequency) == (cons.trackingFrequency - 1) and self.exploreIter > 0:
+                    for lp in self.attTrack.keys():
+                        if lp in self.attTrackRecord.keys():
+                            self.attTrackRecord[lp].append(self.attTrack[lp])
+                        else:
+                            self.attTrackRecord[lp] = list(self.attTrack[lp])
                     self.population.runPopAveEval(self.exploreIter)
                     self.population.runAttGeneralitySum(True)
+                    # self.population.increment_att_tracking(matchset_copy, self.exploreIter)
                     trackedAccuracy = sum(self.correct) / float(cons.trackingFrequency)  # Accuracy over the last "trackingFrequency" number of iterations.
                     trackedHloss = sum(self.hloss) / float(cons.trackingFrequency)
                     cons.env.startEvaluationMode()
@@ -2334,12 +2380,6 @@ def MLRBC(arg):
                         cons.maxLearningIterations = self.exploreIter
                     else:
                         loss_previous = testEval[1]['HammingLoss']
-
-                    # trackedTP = sum(self.tp) / float(cons.trackingFrequency)
-                    # trackedTN = sum(self.tn) / float(cons.trackingFrequency)
-                    # trackedOverGenAcc = sum(self.overGenAcc) / float(cons.trackingFrequency)
-                    # self.learnTrackOut.write(self.population.getPopTrack(round(trackedHloss, 4), round(trackedAccuracy, 4), self.exploreIter + 1,
-                    #                                                      cons.trackingFrequency, trackedTP, trackedTN, trackedOverGenAcc))
                     self.learnTrackOut.write(self.population.getPopTrack(round(trackedHloss, 4), round(trackedAccuracy, 4), self.exploreIter + 1))
                 cons.timer.stopTimeEvaluation()
 
@@ -2406,8 +2446,8 @@ def MLRBC(arg):
 
             # Once eLCS has reached the last learning iteration, close the tracking file
             self.learnTrackOut.close()
+            print(len(self.population.popSet))
             print("MLRBC Run Completed on model " + str(arg[0]))
-            # self.doPopAnalysis()
 
         def runIteration(self, state_phenotype_conf, exploreIter):
             # -----------------------------------------------------------------------------------------------------------------------------------------
@@ -2426,7 +2466,6 @@ def MLRBC(arg):
             prediction.combinePredictions()
             prediction.oneThreshold()
             prediction.getCombVote()
-
 
             itt = exploreIter % cons.trackingFrequency
             # -------------------------------------------------------
@@ -2489,16 +2528,21 @@ def MLRBC(arg):
                 cons.timer.startTimeSubsumption()
                 self.population.doCorrectSetSubsumption()
                 cons.timer.stopTimeSubsumption()
+
+            if exploreIter >= 1000:
+                self.doAttTracking()
             # -----------------------------------------------------------------------------------------------------------------------------------------
             # RUN THE GENETIC ALGORITHM - Discover new offspring rules from a selected pair of parents
             # -----------------------------------------------------------------------------------------------------------------------------------------
             if len(self.population.correctSet)>=1:# and exploreIter < (cons.maxLearningIterations*0.9):
-                self.population.runGA(exploreIter, state_phenotype_conf[0], state_phenotype_conf[1])
+                self.population.runGA(exploreIter, state_phenotype_conf[0], state_phenotype_conf[1], self.attTrack)
             # -----------------------------------------------------------------------------------------------------------------------------------------
             # SELECT RULES FOR DELETION - This is done whenever there are more rules in the population than 'N', the maximum population size.
             # -----------------------------------------------------------------------------------------------------------------------------------------
             self.population.deletion(exploreIter)
+            matchset_copy = self.population.matchSet
             self.population.clearSets()  # Clears the match and correct sets for the next learning iteration
+            return matchset_copy
 
         def doPopEvaluation(self, isTrain):
 
@@ -2717,7 +2761,7 @@ def MLRBC(arg):
             predictionTies = float(tie) / float(instances)
             instanceCoverage = 1.0 - predictionFail
             predictionMade = 1.0 - (predictionFail + predictionTies)
-            print("no match samples: ", predictionFail)
+            # print("no match samples: ", predictionFail)
 
             # print("-----------------------------------------------")
             # print(str(myType) + " Evaluation Results on model " + str(arg[0]) +  ":")
@@ -2725,6 +2769,23 @@ def MLRBC(arg):
             # print(resultList[0], resultList[1])
 
             return resultList
+
+        def doAttTracking(self):
+            temp_track_pos = [0] * cons.env.formatData.numAttributes
+            for ref in self.population.correctSet:
+                cl = self.population.popSet[ref]
+                for att in cl.specifiedAttList:
+                    temp_track_pos[att] += cl.numerosity
+            num_sum = sum([self.population.popSet[ref].numerosity for ref in self.population.correctSet])
+            temp_track = [t/num_sum for t in temp_track_pos]
+            for idx, l in enumerate(cl.phenotype):
+                if l == '1':
+                    if idx in self.attTrack.keys():  # replaced all 'cl.phenotype' with 'idx'
+                        d = [0.1*(val1-val2) for val1, val2 in zip(temp_track, self.attTrack[idx])]
+                        update = [val1+val2 for val1, val2 in zip(self.attTrack[idx], d)]
+                        self.attTrack[idx] = update
+                    else:
+                        self.attTrack[idx] = [0.01*t for t in temp_track]
 
         def doPopAnalysis(self):
             newPopSet = []
@@ -2829,6 +2890,17 @@ def MLRBC(arg):
 
         def writePopStats(self, outFile, trainEval, testEval, exploreIter, pop, correct):
             """ Makes output text file which includes all of the evaluation statistics for a complete analysis of all training and testing data on the current eLCS rule population. """
+            # print('LP attribute tracking in [M]')
+            # for lp in pop.attributeAccListM.keys():
+            #     print(lp)
+            #     for record in pop.attributeAccListM[lp]:
+            #         print(list(record))
+            # print('LP attribute tracking in [P]')
+            # for lp in pop.attributeAccList.keys():
+            #     print(lp)
+            #     for record in pop.attributeAccList[lp]:
+            #         print(list(record))
+
             try:
                 save_path = 'Run_results_MLRBC'
                 completeName = os.path.join(save_path, outFile)
@@ -2871,6 +2943,7 @@ def MLRBC(arg):
             popStatsOut.write("SpecificitySum:------------------------------------------------------------------------\n")
             headList = cons.env.formatData.trainHeaderList  # preserve order of original dataset
 
+            popStatsOut.write('lp \t')
             for i in range(len(headList)):
                 if i < len(headList) - 1:
                     popStatsOut.write(str(headList[i]) + "\t")
@@ -2878,13 +2951,16 @@ def MLRBC(arg):
                     popStatsOut.write(str(headList[i]) + "\n")
 
             # Prints out the Specification Sum for each attribute
-            for i in range(len(pop.attributeSpecList)):
-                if i < len(pop.attributeSpecList) - 1:
-                    popStatsOut.write(str(pop.attributeSpecList[i]) + "\t")
-                else:
-                    popStatsOut.write(str(pop.attributeSpecList[i]) + "\n")
+            for lp in pop.attSpecLP.keys():
+                popStatsOut.write(lp + "\t")
+                for i in range(len(pop.attSpecLP[lp])):
+                    if i < len(pop.attSpecLP[lp]) - 1:
+                        popStatsOut.write(str(pop.attSpecLP[lp][i]) + "\t")
+                    else:
+                        popStatsOut.write(str(pop.attSpecLP[lp][i]) + "\n")
 
             popStatsOut.write("\nAccuracySum:------------------------------------------------------------------------\n")
+            popStatsOut.write('lp \t')
             for i in range(len(headList)):
                 if i < len(headList) - 1:
                     popStatsOut.write(str(headList[i]) + "\t")
@@ -2892,11 +2968,13 @@ def MLRBC(arg):
                     popStatsOut.write(str(headList[i]) + "\n")
 
             # Prints out the Accuracy Weighted Specification Count for each attribute
-            for i in range(len(pop.attributeAccList)):
-                if i < len(pop.attributeAccList) - 1:
-                    popStatsOut.write(str(pop.attributeAccList[i]) + "\t")
-                else:
-                    popStatsOut.write(str(pop.attributeAccList[i]) + "\n")
+            for lp in pop.attAccLP.keys():
+                popStatsOut.write(lp + "\t")
+                for i in range(len(pop.attAccLP[lp])):
+                    if i < len(pop.attAccLP[lp]) - 1:
+                        popStatsOut.write(str(pop.attAccLP[lp][i]) + "\t")
+                    else:
+                        popStatsOut.write(str(pop.attAccLP[lp][i]) + "\n")
 
                     # Time Track ---------------------------------------------------------------------------------------------------------
             popStatsOut.write(
@@ -4383,6 +4461,7 @@ def MLRBC(arg):
     cons.referenceEnv(env) #Passes the environment to 'Constants' (cons) so that it can be easily accessed from anywhere within the code.
     cons.parseIterations() #Identify the maximum number of learning iterations as well as evaluation checkpoints.
     alg = eLCS()
-    return(alg.perfreport)
+    output = {"perf":  alg.perfreport, "track": alg.attTrack}
+    return(output)
 
 

@@ -339,21 +339,20 @@ class parallelRun():
                         Pop = RebootModel.ClassifierSet(dataManage, modelName)
                         argument.append(Pop)
                     arg_instances.append(argument)
-                measures = Parallel(n_jobs = NO_PARALLEL_JOBS, verbose = 1, backend = "multiprocessing")(map(delayed(MLRBC.MLRBC), arg_instances))
+                measures = Parallel(n_jobs=NO_PARALLEL_JOBS, verbose=1, backend="multiprocessing")(map(delayed(MLRBC.MLRBC), arg_instances))
                 # for meas in measures:
                 #     print([round(val, 4) for val in meas.values()])
                 self.meanPerformance(measures)
             else:
                 completeTrainFileName = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + ".txt")
                 completeValidFileName = os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + ".txt")
-                trainDataCSV = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + "-csv.csv")
-                validDataCSV = os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + "-csv.csv")
-                completeDataFileName = os.path.join(DATA_FOLDER, DATA_HEADER, DATA_HEADER + "-csv.csv")
+                trainDataCSV = os.path.join(DATA_FOLDER, DATA_HEADER, TRAIN_DATA_HEADER + ".csv")
+                validDataCSV = os.path.join(DATA_FOLDER, DATA_HEADER, VALID_DATA_HEADER + ".csv")
+                completeDataFileName = os.path.join(DATA_FOLDER, DATA_HEADER, DATA_HEADER + ".csv")
 
                 if os.path.isfile(completeTrainFileName):      # training.txt exists
                     pass
                 else:
-
                     if os.path.isfile(trainDataCSV):           # training.csv exists
                         convertCSV2TXT(trainDataCSV, completeTrainFileName)
                         convertCSV2TXT(validDataCSV, completeValidFileName)
@@ -381,16 +380,31 @@ class parallelRun():
                     Pop = RebootModel.ClassifierSet(dataManage, modelName)
                     argument.append(Pop)
                 measures = MLRBC.MLRBC(argument)
-                print([round(val, 4) for val in measures.values()])
+                # print([round(val, 4) for val in measures.values()])
 
-    def meanPerformance(self, perfReports):
+    def meanPerformance(self, measures):
         """
         :param perfReports: multi-label performance measures for multiple experiments
         """
+        perfReports = [run['perf'] for run in measures]
+        att_track = [run['track'] for run in measures]
         total = sum(map(Counter, perfReports), Counter())
         meanPerf = {key: val/len(perfReports) for key, val in total.items()}
-        print("Average ML performance:\n")
+        print("Average ML performance:")
         print([round(val, 4) for val in meanPerf.values()])
+
+        meanTrack = {}
+        for track in att_track:
+            for lp, value in track.items():
+                if lp in meanTrack.keys():
+                    meanTrack[lp] = [cur+v for (cur, v) in zip(meanTrack[lp], value)]
+                else:
+                    meanTrack[lp] = value
+        meanTrack = {key: [v/len(att_track) for v in val] for key, val in meanTrack.items()}
+        print("Average attribute tracking:")
+        for key, value in meanTrack.items():
+            print(key)
+            print([round(val, 4) for val in value])
 
     def dataProp(self, infilename):
         """
@@ -638,7 +652,7 @@ if __name__== "__main__":
     parallel = parallelRun()
     print('Training MLR model on ' + DATA_HEADER + ' dataset.')
 
-    completeDataFileName = os.path.join(DATA_FOLDER, DATA_HEADER, DATA_HEADER + "-csv.csv")
+    completeDataFileName = os.path.join(DATA_FOLDER, DATA_HEADER, DATA_HEADER + ".csv")
     parallel.dataProp(completeDataFileName)
 
     pathlib.Path(os.path.join(RUN_RESULT_PATH)).mkdir(parents=True, exist_ok=True)
