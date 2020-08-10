@@ -11,11 +11,11 @@ DATA_FOLDER = "D:\Datasets"
 RUN_RESULT_PATH = "Run_results_MLRBC"
 
 
-NO_TRAIN_ITERATION = [50000]
-POP_SIZE = [3000]
+NO_TRAIN_ITERATION = [10000]
+POP_SIZE = [2000]
 P_HASH = [0.5]
 THETA_GA = [25]
-NU = [2]
+NU = [5]
 NO_EXPERIMENTS_AVERAGING = 10      #repeat the training to reduce the variance
 NO_PARALLEL_JOBS = NO_EXPERIMENTS_AVERAGING              #number of threads to perform parallel model training
 
